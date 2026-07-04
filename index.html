@@ -1,0 +1,1336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Display UI Designer (Adafruit Edition v6.1)</title>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-panel: rgba(37, 37, 38, 0.95);
+            --bg-input: #3c3c3c;
+            --text-main: #cccccc;
+            --text-light: #ffffff;
+            --accent: #007acc;
+            --accent-hover: #005f9e;
+            --border: #444444;
+            --canvas-bg: #000000;
+            --grid-line: #2a2a2a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; overflow: hidden; }
+
+        /* MODALS */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: #252526; padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 400px; text-align: center; }
+        .modal-content h2 { color: var(--text-light); margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; text-align: left;}
+        label { display: block; margin-bottom: 5px; font-size: 14px; }
+        select, input[type="text"], input[type="number"] { width: 100%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px; }
+        
+        ::placeholder { color: #888888; font-style: italic; }
+        .custom-dims { display: none; gap: 10px; margin-top: 10px; }
+        button { background: var(--accent); color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; transition: background 0.2s;}
+        button:hover { background: var(--accent-hover); }
+
+        /* WARNING MODAL SPECIFICS */
+        #warning-modal .modal-content { border-color: #ff5555; box-shadow: 0 0 20px rgba(255, 85, 85, 0.2); }
+        #warning-modal button { background: #ff5555; }
+        #warning-modal button:hover { background: #cc0000; }
+
+        /* MAIN APP LAYOUT */
+        #app-container { display: none; position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #111; }
+        
+        .panel { display: flex; flex-direction: column; }
+        .panel-header { background: #333333; padding: 10px; font-weight: bold; color: var(--text-light); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
+        
+        /* LEFT PANEL: Tools & Properties */
+        .left-panel { position: absolute; top: 0; left: 0; width: 300px; height: 100%; z-index: 10; background: var(--bg-panel); border-right: 1px solid var(--border); box-shadow: 2px 0 15px rgba(0,0,0,0.6); overflow-y: auto; backdrop-filter: blur(5px); }
+        .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; border-bottom: 1px solid var(--border); }
+        .tool-btn { background: var(--bg-input); font-size: 12px; padding: 8px 5px; text-align: center; border: 1px solid transparent; cursor: pointer; color: var(--text-light); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 55px;}
+        .tool-btn.active { border-color: var(--accent); background: #2a2d2e; }
+        .tool-icon { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; margin-bottom: 4px;}
+        
+        #properties-panel { padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+        .slider-group { display: flex; align-items: center; gap: 8px; }
+        .slider-group input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-group input[type="number"] { width: 60px; padding: 4px; text-align: right; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .checkbox-group input { cursor: pointer; }
+        
+        #elements-list { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
+        .element-capsule { padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; text-align: center; cursor: pointer; color: white; transition: background 0.2s, border-color 0.2s; background: var(--bg-input); }
+        .element-capsule:hover { border-color: var(--accent); }
+        .element-capsule.active { background: var(--accent); border-color: var(--accent-hover); }
+
+        /* RIGHT PANEL: Code Generator & Pages */
+        .right-panel { position: absolute; top: 0; right: 0; width: 350px; height: 100%; z-index: 10; background: var(--bg-panel); border-left: 1px solid var(--border); box-shadow: -2px 0 15px rgba(0,0,0,0.6); backdrop-filter: blur(5px); transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); display: flex; flex-direction: column; }
+        .right-panel.closed { transform: translateX(100%); }
+        
+        #right-panel-toggle { position: absolute; top: 15px; left: -40px; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-panel); border: 1px solid var(--border); display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); color: white; font-weight: bold; font-size: 18px; z-index: 11; }
+        .right-panel:not(.closed) #right-panel-toggle { left: 10px; border-radius: 4px; background: var(--bg-input); border-color: transparent;}
+        
+        #right-panel-toggle span { display: inline-block; transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); }
+        .right-panel.closed #right-panel-toggle span { transform: rotate(0deg); } 
+        .right-panel:not(.closed) #right-panel-toggle span { transform: rotate(180deg); } 
+
+        /* PAGES CONTAINER */
+        #pages-wrapper { flex-shrink: 0; max-height: 250px; overflow-y: auto; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 1px solid var(--border); }
+        .page-thumb-container { background: var(--bg-input); border-radius: 8px; border: 2px solid transparent; padding: 8px; display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; transition: border 0.2s; }
+        .page-thumb-container.active { border-color: var(--accent); }
+        .page-canvas-wrapper { width: 100%; aspect-ratio: 2/1; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; justify-content: center; align-items: center; overflow: hidden; margin-bottom: 5px; }
+        .page-canvas-wrapper canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+        .page-name-input { width: 100%; background: transparent; border: none; color: white; text-align: center; font-size: 11px; outline: none; }
+        
+        .page-add-btn { background: rgba(255,255,255,0.05); border: 2px dashed #666; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; color: #888; font-weight: bold; transition: all 0.2s; }
+        .page-add-btn:hover { background: rgba(255,255,255,0.1); color: white; border-color: #888; }
+        
+        .page-overlay { position: absolute; top:0; left:0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); border-radius: 8px; display: flex; justify-content: center; align-items: center; gap: 10px; opacity: 0; transition: opacity 0.2s; }
+        .page-thumb-container:hover .page-overlay:not(.hidden) { opacity: 1; }
+        .page-action-btn { background: #444; border:none; color: white; padding: 5px; border-radius: 4px; cursor:pointer; font-size: 12px; }
+        .page-action-btn:hover { background: var(--accent); }
+        .page-action-btn.delete:hover { background: #cc3333; }
+
+        .code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; background: transparent; border-bottom: 1px solid var(--border); }
+        .code-actions button { margin: 0; font-size: 11px; padding: 6px; }
+        #code-output { flex-grow: 1; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 12px; padding: 10px; border: none; resize: none; outline: none; white-space: pre; }
+
+        /* CENTER PANEL: Canvas & Zoom */
+        .center-panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; overflow: hidden; }
+        .zoom-controls { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 5; background: var(--bg-panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; gap: 15px; padding: 10px 20px; }
+        .zoom-controls input[type="range"] { width: 150px; cursor: pointer; }
+        .zoom-controls span { font-weight: bold; font-size: 14px; min-width: 50px; text-align: right; }
+        
+        .canvas-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        #canvas-wrapper { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px solid var(--border); background: #252526; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        canvas { background: var(--canvas-bg); cursor: crosshair; image-rendering: pixelated; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="warning-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 style="color: #ff5555; text-transform: uppercase; font-weight: 900; letter-spacing: 1px;">⚠️ Device Warning</h2>
+            <p style="line-height: 1.6; font-size: 15px; margin-bottom: 20px;">
+                This project is <b>HEAVILY</b> focused for desktop use.<br><br>
+                Using it with a mobile device or touch screen will be <b>ABSOLUTELY ASS</b>.
+            </p>
+            <button onclick="document.getElementById('warning-modal').style.display='none'">I Understand</button>
+        </div>
+    </div>
+
+    <div id="setup-modal" class="modal-overlay" style="z-index: 1000;">
+        <div class="modal-content">
+            <h2>Project Setup</h2>
+            <div class="form-group">
+                <label>Display Type</label>
+                <select id="setup-display" onchange="toggleCustomDims()">
+                    <option value="oled_128x64">OLED 128x64</option>
+                    <option value="oled_128x32">OLED 128x32</option>
+                    <option value="custom_oled">Custom OLED</option>
+                </select>
+            </div>
+            <div class="form-group custom-dims" id="custom-dims-container">
+                <input type="number" id="setup-w" placeholder="Width (px)" value="128">
+                <input type="number" id="setup-h" placeholder="Height (px)" value="64">
+            </div>
+            <button onclick="initProject()">Create Project</button>
+        </div>
+    </div>
+
+    <div id="app-container">
+        
+        <div class="panel left-panel">
+            <div class="panel-header">Tools</div>
+            <div class="tools-grid" id="tools-grid">
+                <button class="tool-btn active" onclick="setTool('select')" title="Select">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/cursor.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('move')" title="Move Canvas (Pan)">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/move.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('brush')" title="Brush">
+                    <img src="https://cdn-icons-png.flaticon.com/512/103/103414.png" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('text')" title="Add Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/text.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="setTool('dynamic_text')" title="Add Functional Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/dynamictext.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="setTool('scrolling_text')" title="Add Scrolling Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/scrolling%20text.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('meter')" title="Insert Progress Meter">
+                    <span>Progress Bar</span>
+                </button>
+                <button class="tool-btn" onclick="setTool('shape')" title="Insert Functional Shape">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/shapes.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="setTool('bitmap')" title="Insert Bitmap">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/insertimage.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="deleteSelected()" title="Delete Selected (Backspace)">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/delete.png?raw=true" class="tool-icon">
+                </button>
+            </div>
+            
+            <div class="panel-header">Properties</div>
+            <div id="properties-panel">
+                <div style="font-size:12px; color:#888;">Select an element or add a new one.</div>
+            </div>
+
+            <div class="panel-header">Elements</div>
+            <div id="elements-list"></div>
+        </div>
+
+        <div class="panel center-panel" id="center-panel">
+            <div class="zoom-controls">
+                <button class="element-capsule" onclick="undo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Undo (Ctrl+Z)">↺ Undo</button>
+                <button class="element-capsule" onclick="redo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Redo (Ctrl+Y)">↻ Redo</button>
+                
+                <label style="margin-left: 10px;">Zoom:</label>
+                <input type="range" id="zoom-slider" min="1" max="15" value="4" oninput="setZoom(this.value)">
+                <input type="number" id="zoom-input" min="1" max="15" value="4" style="width: 50px;" onchange="setZoom(this.value)">
+                <span id="zoom-label">400%</span>
+            </div>
+            <div class="canvas-area">
+                <div id="canvas-wrapper">
+                    <canvas id="display-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right-panel" id="right-panel">
+            <div id="right-panel-toggle" onclick="toggleRightPanel()"><span>&lt;</span></div>
+            <div class="panel-header" style="justify-content: center; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Pages</div>
+            <div id="pages-wrapper"></div>
+            <div class="code-actions">
+                <button onclick="copyCode('all')">Copy All</button>
+                <button onclick="copyCode('init')">Copy Init</button>
+                <button onclick="copyCode('setup')">Copy Setup</button>
+                <button onclick="copyCode('loop')">Copy Loop</button>
+            </div>
+            <textarea id="code-output" readonly></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        // --- ADAFRUIT GFX STANDARD 5x7 FONT (ASCII 32-127) ---
+        const adafruit_font = new Uint8Array([
+            0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x5f,0x00,0x00, 0x00,0x07,0x00,0x07,0x00, 0x14,0x7f,0x14,0x7f,0x14,
+            0x24,0x2a,0x7f,0x2a,0x12, 0x23,0x13,0x08,0x64,0x62, 0x36,0x49,0x55,0x22,0x50, 0x00,0x05,0x03,0x00,0x00,
+            0x00,0x1c,0x22,0x41,0x00, 0x00,0x41,0x22,0x1c,0x00, 0x14,0x08,0x3e,0x08,0x14, 0x08,0x08,0x3e,0x08,0x08,
+            0x00,0x50,0x30,0x00,0x00, 0x08,0x08,0x08,0x08,0x08, 0x00,0x60,0x60,0x00,0x00, 0x20,0x10,0x08,0x04,0x02,
+            0x3e,0x51,0x49,0x45,0x3e, 0x00,0x42,0x7f,0x40,0x00, 0x42,0x61,0x51,0x49,0x46, 0x21,0x41,0x45,0x4b,0x31,
+            0x18,0x14,0x12,0x7f,0x10, 0x27,0x45,0x45,0x45,0x39, 0x3c,0x4a,0x49,0x49,0x30, 0x01,0x71,0x09,0x05,0x03,
+            0x36,0x49,0x49,0x49,0x36, 0x06,0x49,0x49,0x29,0x1e, 0x00,0x36,0x36,0x00,0x00, 0x00,0x56,0x36,0x00,0x00,
+            0x08,0x14,0x22,0x41,0x00, 0x14,0x14,0x14,0x14,0x14, 0x00,0x41,0x22,0x14,0x08, 0x02,0x01,0x51,0x09,0x06,
+            0x32,0x49,0x79,0x41,0x3e, 0x7e,0x11,0x11,0x11,0x7e, 0x7f,0x49,0x49,0x49,0x36, 0x3e,0x41,0x41,0x41,0x22,
+            0x7f,0x41,0x41,0x22,0x1c, 0x7f,0x49,0x49,0x49,0x41, 0x7f,0x09,0x09,0x09,0x01, 0x3e,0x41,0x49,0x49,0x7a,
+            0x7f,0x08,0x08,0x08,0x7f, 0x00,0x41,0x7f,0x41,0x00, 0x20,0x40,0x41,0x3f,0x01, 0x7f,0x08,0x14,0x22,0x41,
+            0x7f,0x40,0x40,0x40,0x40, 0x7f,0x02,0x0c,0x02,0x7f, 0x7f,0x04,0x08,0x10,0x7f, 0x3e,0x41,0x41,0x41,0x3e,
+            0x7f,0x09,0x09,0x09,0x06, 0x3e,0x41,0x51,0x21,0x5e, 0x7f,0x09,0x19,0x29,0x46, 0x46,0x49,0x49,0x49,0x31,
+            0x01,0x01,0x7f,0x01,0x01, 0x3f,0x40,0x40,0x40,0x3f, 0x1f,0x20,0x40,0x20,0x1f, 0x3f,0x40,0x38,0x40,0x3f,
+            0x63,0x14,0x08,0x14,0x63, 0x07,0x08,0x70,0x08,0x07, 0x61,0x51,0x49,0x45,0x43, 0x00,0x7f,0x41,0x41,0x00,
+            0x02,0x04,0x08,0x10,0x20, 0x00,0x41,0x41,0x7f,0x00, 0x04,0x02,0x01,0x02,0x04, 0x40,0x40,0x40,0x40,0x40,
+            0x00,0x01,0x02,0x04,0x00, 0x20,0x54,0x54,0x54,0x78, 0x7f,0x48,0x44,0x44,0x38, 0x38,0x44,0x44,0x44,0x20,
+            0x38,0x44,0x44,0x48,0x7f, 0x38,0x54,0x54,0x54,0x18, 0x08,0x7e,0x09,0x01,0x02, 0x0c,0x52,0x52,0x52,0x3e,
+            0x7f,0x08,0x04,0x04,0x78, 0x00,0x44,0x7d,0x40,0x00, 0x20,0x40,0x44,0x3d,0x00, 0x7f,0x10,0x28,0x44,0x00,
+            0x00,0x41,0x7f,0x40,0x00, 0x7c,0x04,0x18,0x04,0x78, 0x7c,0x08,0x04,0x04,0x78, 0x38,0x44,0x44,0x44,0x38,
+            0x7c,0x14,0x14,0x14,0x08, 0x08,0x14,0x14,0x18,0x7c, 0x7c,0x08,0x04,0x04,0x08, 0x48,0x54,0x54,0x54,0x20,
+            0x04,0x3f,0x44,0x40,0x20, 0x3c,0x40,0x40,0x20,0x7c, 0x1c,0x20,0x40,0x20,0x1c, 0x3c,0x40,0x30,0x40,0x3c,
+            0x44,0x28,0x10,0x28,0x44, 0x0c,0x50,0x50,0x50,0x3c, 0x44,0x64,0x54,0x4c,0x44, 0x00,0x08,0x36,0x41,0x00,
+            0x00,0x00,0x7f,0x00,0x00, 0x00,0x41,0x36,0x08,0x00, 0x10,0x08,0x08,0x10,0x08, 0x78,0x46,0x41,0x46,0x78
+        ]);
+
+        function drawGFXText(ctx, text, startX, startY, size, scale, color) {
+            ctx.fillStyle = color;
+            let cursorX = startX;
+            for (let i = 0; i < text.length; i++) {
+                let charCode = text.charCodeAt(i);
+                if (charCode < 32 || charCode > 127) charCode = 32;
+                let offset = (charCode - 32) * 5;
+                for (let col = 0; col < 5; col++) {
+                    let line = adafruit_font[offset + col];
+                    for (let row = 0; row < 8; row++) {
+                        if (line & (1 << row)) {
+                            ctx.fillRect(
+                                (cursorX + col * size) * scale,
+                                (startY + row * size) * scale,
+                                size * scale,
+                                size * scale
+                            );
+                        }
+                    }
+                }
+                cursorX += 6 * size; 
+            }
+        }
+
+        // --- STATE MANAGEMENT & HISTORY ---
+        const state = {
+            project: { width: 128, height: 64, type: 'oled_128x64' },
+            scale: 4, 
+            panX: 0, 
+            panY: 0,
+            activeTool: 'select',
+            selectedElementId: null,
+            nextId: 1,
+            brushSize: 1,
+            hoverX: null,
+            hoverY: null,
+            pages: [],
+            currentPageIndex: 0
+        };
+
+        const historyStack = [];
+        let historyIndex = -1;
+
+        function getElements() { return state.pages[state.currentPageIndex].elements; }
+        function getBgPixels() { return state.pages[state.currentPageIndex].backgroundPixels; }
+
+        const canvas = document.getElementById('display-canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+        const centerPanel = document.getElementById('center-panel');
+        
+        let isDrawing = false;
+        let isPanning = false;
+        let brushState = 1; 
+        let draggingElement = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let startPanMouseX = 0;
+        let startPanMouseY = 0;
+        let initialPanX = 0;
+        let initialPanY = 0;
+        let lastHoverX = null;
+        let lastHoverY = null;
+
+        function saveState() {
+            if (historyIndex < historyStack.length - 1) {
+                historyStack.splice(historyIndex + 1);
+            }
+            historyStack.push(JSON.stringify({
+                pages: state.pages,
+                currentPageIndex: state.currentPageIndex,
+                nextId: state.nextId
+            }));
+            historyIndex++;
+            renderPagesUI();
+        }
+
+        window.undo = function() {
+            if (historyIndex > 0) { historyIndex--; restoreState(); }
+        }
+
+        window.redo = function() {
+            if (historyIndex < historyStack.length - 1) { historyIndex++; restoreState(); }
+        }
+
+        function restoreState() {
+            const h = JSON.parse(historyStack[historyIndex]);
+            state.pages = h.pages;
+            state.currentPageIndex = h.currentPageIndex;
+            state.nextId = h.nextId;
+            state.selectedElementId = null;
+
+            renderElementsList();
+            renderProperties();
+            renderPagesUI();
+            renderCanvas();
+            generateCode();
+        }
+
+        // --- KEYBOARD SHORTCUTS ---
+        window.addEventListener('keydown', e => {
+            const isInputMode = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+            if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+            else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+            else if ((e.key === 'Backspace' || e.key === 'Delete') && !isInputMode) {
+                if (state.selectedElementId) { e.preventDefault(); deleteSelected(); }
+            }
+        });
+
+        // --- PAGE MANAGEMENT ---
+        function addPage() {
+            const newPageId = `page_${state.pages.length}`;
+            state.pages.push({
+                id: newPageId,
+                name: newPageId,
+                elements: [],
+                backgroundPixels: Array.from({length: state.project.width}, () => new Array(state.project.height).fill(0))
+            });
+            state.currentPageIndex = state.pages.length - 1;
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function selectPage(index) {
+            state.currentPageIndex = index;
+            state.selectedElementId = null;
+            refreshUI();
+        }
+
+        function deletePage(index) {
+            if (state.pages.length <= 1) return;
+            state.pages.splice(index, 1);
+            if (state.currentPageIndex >= state.pages.length) {
+                state.currentPageIndex = state.pages.length - 1;
+            }
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function duplicatePage(index) {
+            const source = JSON.parse(JSON.stringify(state.pages[index]));
+            source.id = `page_${state.pages.length}`;
+            source.name = `${source.name}_copy`;
+            source.elements.forEach(el => { el.id = state.nextId++; });
+            
+            state.pages.push(source);
+            state.currentPageIndex = state.pages.length - 1;
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function renamePage(index, newName) {
+            state.pages[index].name = newName;
+            saveState();
+            generateCode();
+        }
+
+        function refreshUI() {
+            renderPagesUI();
+            renderElementsList();
+            renderProperties();
+            renderCanvas();
+            generateCode();
+        }
+
+        // TEXT PARSERS
+        function parseTextOutput(rawText) {
+            if(!rawText) return '""';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t.substring(1, t.length - 1); 
+            if (t.startsWith('"') && t.endsWith('"')) return t; 
+            return `"${t}"`; 
+        }
+
+        function getDisplayText(rawText) {
+            if(!rawText) return '';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t; 
+            if (t.startsWith('"') && t.endsWith('"')) return t.substring(1, t.length - 1); 
+            return t;
+        }
+
+        // --- SETUP PHASE ---
+        function toggleCustomDims() {
+            const val = document.getElementById('setup-display').value;
+            document.getElementById('custom-dims-container').style.display = val.includes('custom') ? 'flex' : 'none';
+        }
+
+        function initProject() {
+            const type = document.getElementById('setup-display').value;
+            state.project.type = type;
+
+            if(type === 'oled_128x64') { state.project.width = 128; state.project.height = 64; }
+            else if(type === 'oled_128x32') { state.project.width = 128; state.project.height = 32; }
+            else {
+                state.project.width = parseInt(document.getElementById('setup-w').value) || 128;
+                state.project.height = parseInt(document.getElementById('setup-h').value) || 64;
+            }
+
+            state.pages = [{
+                id: 'page_0', name: 'page_0',
+                elements: [],
+                backgroundPixels: Array.from({length: state.project.width}, () => new Array(state.project.height).fill(0))
+            }];
+            state.currentPageIndex = 0;
+            
+            state.panX = 0; state.panY = 0;
+            updateCanvasPosition();
+            updateCanvasDimensions();
+            
+            document.getElementById('setup-modal').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+
+            saveState(); 
+            refreshUI();
+        }
+
+        function toggleRightPanel() {
+            document.getElementById('right-panel').classList.toggle('closed');
+        }
+
+        // --- ZOOM & PAN LOGIC ---
+        // Bound scroll-to-zoom to the entire center panel for robustness
+        centerPanel.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY > 0 ? -1 : 1;
+            let oldScale = state.scale;
+            let newScale = state.scale + zoomAmount;
+            
+            if(newScale < 1) newScale = 1;
+            if(newScale > 15) newScale = 15;
+            
+            if(newScale !== oldScale) {
+                const wrapperRect = canvasWrapper.getBoundingClientRect();
+                let cx = e.clientX - (wrapperRect.left + wrapperRect.width/2);
+                let cy = e.clientY - (wrapperRect.top + wrapperRect.height/2);
+                
+                let dx = cx * (newScale / oldScale - 1);
+                let dy = cy * (newScale / oldScale - 1);
+                
+                state.panX -= dx;
+                state.panY -= dy;
+                
+                state.scale = newScale;
+                document.getElementById('zoom-slider').value = newScale;
+                document.getElementById('zoom-input').value = newScale;
+                
+                updateCanvasDimensions();
+                updateCanvasPosition();
+                renderCanvas();
+            }
+        }, {passive: false});
+
+        function setZoom(value) {
+            let z = parseInt(value);
+            if(isNaN(z) || z < 1) z = 1;
+            if(z > 15) z = 15;
+            state.scale = z;
+            document.getElementById('zoom-slider').value = z;
+            document.getElementById('zoom-input').value = z;
+            updateCanvasDimensions();
+            renderCanvas();
+        }
+
+        function updateCanvasDimensions() {
+            canvas.width = state.project.width * state.scale;
+            canvas.height = state.project.height * state.scale;
+            document.getElementById('zoom-label').innerText = `${state.scale * 100}%`;
+        }
+
+        function updateCanvasPosition() {
+            canvasWrapper.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
+        }
+
+        // --- TOOLS & ELEMENT CREATION ---
+        function setTool(tool) {
+            state.activeTool = tool;
+            const btns = document.querySelectorAll('.tool-btn');
+            btns.forEach(btn => btn.classList.remove('active'));
+            if(event && event.currentTarget) event.currentTarget.classList.add('active');
+            
+            if (tool === 'brush') {
+                state.selectedElementId = null;
+                renderProperties();
+                renderElementsList();
+                canvas.style.cursor = 'none';
+            } else {
+                canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
+            }
+
+            if(tool !== 'select' && tool !== 'move' && tool !== 'brush' && tool !== 'delete') {
+                createElement(tool);
+                setTool('select'); 
+                btns[0].classList.add('active');
+            }
+        }
+
+        function getSelected() { return getElements().find(e => e.id === state.selectedElementId); }
+
+        function deleteSelected() {
+            if(state.selectedElementId) {
+                const els = getElements();
+                state.pages[state.currentPageIndex].elements = els.filter(e => e.id !== state.selectedElementId);
+                state.selectedElementId = null;
+                saveState();
+                refreshUI();
+            }
+        }
+
+        function createElement(type) {
+            const el = { id: state.nextId++, type: type, x: 10, y: 10, condition: '', alwaysVisible: true, visibilityMode: 'visible_when', anchored: false };
+            
+            if(type === 'text') { el.text = '"Hello World"'; el.size = 1; }
+            if(type === 'dynamic_text') { el.text = '(sensorVal)'; el.size = 1; }
+            if(type === 'scrolling_text') { el.text = '"Scrolling Msg"'; el.size = 1; el.w = 50; el.h = 10; el.speed = 2; el.direction = 'left'; }
+            if(type === 'meter') { el.w = 50; el.h = 10; el.min = 0; el.max = 100; el.val = 50; el.target = 'temp'; el.thickness = 1; el.isVertical = false; }
+            if(type === 'shape') { el.shapeType = 'rect'; el.w = 20; el.h = 20; el.fill = false; el.thickness = 1; }
+            if(type === 'bitmap') { el.w = 16; el.h = 16; el.hex = '0x00, 0x00'; }
+            
+            getElements().push(el);
+            state.selectedElementId = el.id;
+            
+            saveState();
+            refreshUI();
+        }
+
+        // --- BRUSH LOGIC ---
+        function getBrushPixels(cx, cy) {
+            let pixels = [];
+            for (let x = cx - Math.floor(state.brushSize); x <= cx + Math.floor(state.brushSize); x++) {
+                for (let y = cy - Math.floor(state.brushSize); y <= cy + Math.floor(state.brushSize); y++) {
+                    let offset = (state.brushSize % 2 === 0) ? 0.5 : 0;
+                    let dx = x - cx - offset;
+                    let dy = y - cy - offset;
+                    if (dx*dx + dy*dy <= (state.brushSize/2)*(state.brushSize/2) || state.brushSize === 1) {
+                        if (state.brushSize === 1 && (x !== cx || y !== cy)) continue; 
+                        pixels.push({x, y});
+                    }
+                }
+            }
+            return pixels;
+        }
+
+        function applyBrush(cx, cy) {
+            let pixels = getBrushPixels(cx, cy);
+            let bgs = getBgPixels();
+            pixels.forEach(p => {
+                if(p.x >= 0 && p.x < state.project.width && p.y >= 0 && p.y < state.project.height) {
+                    bgs[p.x][p.y] = brushState;
+                }
+            });
+            renderCanvas();
+        }
+
+        window.updateBrushSize = function(val) {
+            let size = parseInt(val);
+            if (isNaN(size) || size < 1) size = 1;
+            state.brushSize = size;
+            const s = document.getElementById('slider-brushSize');
+            const i = document.getElementById('input-brushSize');
+            if(s) s.value = size;
+            if(i) i.value = size;
+            renderCanvas(); 
+        }
+
+        // --- UI RENDERERS ---
+        function renderPagesUI() {
+            const wrapper = document.getElementById('pages-wrapper');
+            wrapper.innerHTML = '';
+            
+            state.pages.forEach((page, idx) => {
+                const isActive = idx === state.currentPageIndex ? 'active' : '';
+                const overlayClass = isActive ? 'hidden' : '';
+                
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = state.project.width;
+                thumbCanvas.height = state.project.height;
+                const tCtx = thumbCanvas.getContext('2d');
+                tCtx.fillStyle = '#000'; tCtx.fillRect(0,0, thumbCanvas.width, thumbCanvas.height);
+                tCtx.fillStyle = '#fff'; tCtx.strokeStyle = '#fff';
+                
+                for(let x=0; x<state.project.width; x++) {
+                    for(let y=0; y<state.project.height; y++) {
+                        if(page.backgroundPixels[x][y]) tCtx.fillRect(x,y,1,1);
+                    }
+                }
+                page.elements.forEach(el => {
+                    if (el.type === 'text' || el.type === 'dynamic_text' || el.type === 'scrolling_text') {
+                        tCtx.fillRect(el.x, el.y, getDisplayText(el.text).length * 6 * el.size, 8 * el.size);
+                    } else if (el.shapeType === 'circle') {
+                        tCtx.beginPath(); tCtx.arc(el.x, el.y, el.w, 0, Math.PI*2); el.fill? tCtx.fill() : tCtx.stroke();
+                    } else {
+                        tCtx.strokeRect(el.x, el.y, el.w, el.h || el.w);
+                    }
+                });
+
+                const dataURL = thumbCanvas.toDataURL();
+
+                wrapper.innerHTML += `
+                    <div class="page-thumb-container ${isActive}" onclick="if(!event.target.classList.contains('page-name-input') && !event.target.classList.contains('page-action-btn')) selectPage(${idx})">
+                        <div class="page-canvas-wrapper">
+                            <img src="${dataURL}" style="width:100%; height:100%; image-rendering:pixelated;">
+                        </div>
+                        <input type="text" class="page-name-input" value="${page.name}" onchange="renamePage(${idx}, this.value)" onclick="this.select()">
+                        
+                        <div class="page-overlay ${overlayClass}">
+                            <button class="page-action-btn" onclick="duplicatePage(${idx}); event.stopPropagation();" title="Duplicate">Copy</button>
+                            <button class="page-action-btn delete" onclick="deletePage(${idx}); event.stopPropagation();" title="Delete">X</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            wrapper.innerHTML += `
+                <div class="page-add-btn" onclick="addPage()">
+                    <div style="font-size:24px; margin-bottom: 5px;">+</div>
+                    <div style="font-size:12px;">New Page</div>
+                </div>
+            `;
+        }
+
+        window.selectElement = function(id) {
+            state.selectedElementId = id;
+            renderElementsList();
+            renderProperties();
+            renderCanvas();
+        }
+
+        function renderElementsList() {
+            const list = document.getElementById('elements-list');
+            list.innerHTML = '';
+            const els = getElements();
+            if(els.length === 0) {
+                list.innerHTML = '<div style="font-size:12px; color:#888; text-align:center;">No elements added yet.</div>'; return;
+            }
+            els.forEach((el, index) => {
+                const isActive = el.id === state.selectedElementId ? 'active' : '';
+                const typeName = el.type.replace('_', ' ').toUpperCase();
+                list.innerHTML += `<div class="element-capsule ${isActive}" onclick="selectElement(${el.id})">${index + 1}. ${typeName}</div>`;
+            });
+        }
+
+        function renderProperties() {
+            const panel = document.getElementById('properties-panel');
+            panel.innerHTML = '';
+            
+            if (state.activeTool === 'brush') {
+                panel.innerHTML = `
+                    <div class="form-group">
+                        <label>Brush Size (Radius)</label>
+                        <div class="slider-group">
+                            <input type="range" id="slider-brushSize" min="1" max="15" value="${state.brushSize}" oninput="updateBrushSize(this.value)">
+                            <input type="number" id="input-brushSize" min="1" max="15" value="${state.brushSize}" onchange="updateBrushSize(this.value)">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#aaa; margin-top: 10px; line-height:1.4;">
+                        Draw directly on the canvas.<br><br>Click to place pixels, click on existing pixels to erase.
+                    </div>
+                `;
+                return;
+            }
+
+            const el = getSelected();
+            if(!el) { panel.innerHTML = '<div style="font-size:12px; color:#888;">Select an element to view properties.</div>'; return; }
+
+            const createInput = (label, key, type='text', placeholder='') => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <input type="${type}" id="prop-${key}" placeholder='${placeholder}' value='${el[key] !== undefined ? el[key] : ''}' onchange="updateElement(${el.id}, '${key}', this.value)">
+                </div>`;
+
+            const createSlider = (label, key, min, max) => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <div class="slider-group">
+                        <input type="range" id="slider-${key}" min="${min}" max="${max}" value="${el[key]}" oninput="syncSlider(${el.id}, '${key}', this.value)">
+                        <input type="number" id="input-${key}" value="${el[key]}" onchange="syncSlider(${el.id}, '${key}', this.value)">
+                    </div>
+                </div>`;
+
+            const createCheckbox = (label, key) => `
+                <label class="checkbox-group form-group">
+                    <input type="checkbox" ${el[key] ? 'checked' : ''} onchange="updateElement(${el.id}, '${key}', this.checked)">
+                    ${label}
+                </label>`;
+
+            let html = createSlider('X Position', 'x', -50, state.project.width + 50);
+            html += createSlider('Y Position', 'y', -50, state.project.height + 50);
+            html += createCheckbox('Anchor (Lock Position)', 'anchored');
+            html += createCheckbox('Always Visible', 'alwaysVisible');
+            
+            if(!el.alwaysVisible) {
+                html += `<div class="form-group" style="display:flex; gap: 5px; align-items:center;">
+                            <select id="prop-visibilityMode" style="width: 45%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" onchange="updateElement(${el.id}, 'visibilityMode', this.value)">
+                                <option value="visible_when" ${el.visibilityMode==='visible_when'?'selected':''}>Visible When</option>
+                                <option value="invisible_when" ${el.visibilityMode==='invisible_when'?'selected':''}>Invisible When</option>
+                            </select>
+                            <input type="text" id="prop-condition" style="width: 55%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" placeholder="e.g. var == 1" value="${el.condition !== undefined ? el.condition : ''}" onchange="updateElement(${el.id}, 'condition', this.value)">
+                         </div>`;
+            }
+
+            let textPlaceholder = 'e.g., "Hello world" or (sensorval)';
+            if (el.type === 'text') textPlaceholder = 'e.g., "Hello World" displayed as Hello World';
+            else if (el.type === 'dynamic_text') textPlaceholder = '(val) displayed as 1 if val == 1;';
+            else if (el.type === 'scrolling_text') textPlaceholder = 'e.g., "Hello World" or (sensorval)';
+
+            if(el.type === 'text' || el.type === 'dynamic_text') {
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+            } else if (el.type === 'scrolling_text') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90° (Swap Bounds)</button>`;
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+                html += createSlider('Box Width', 'w', 5, state.project.width);
+                html += createSlider('Box Height', 'h', 5, state.project.height);
+                html += createSlider('Scroll Speed', 'speed', 1, 10);
+                html += `<div class="form-group">
+                            <label>Scroll Direction</label>
+                            <select onchange="updateElement(${el.id}, 'direction', this.value)">
+                                <option value="left" ${el.direction==='left'?'selected':''}>Left ←</option>
+                                <option value="right" ${el.direction==='right'?'selected':''}>Right → </option>
+                                <option value="up" ${el.direction==='up'?'selected':''}>Up ↑</option>
+                                <option value="down" ${el.direction==='down'?'selected':''}>Down ↓</option>
+                            </select>
+                         </div>`;
+            } else if (el.type === 'bitmap') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                html += createSlider('Width', 'w', 1, state.project.width);
+                html += createSlider('Height', 'h', 1, state.project.height);
+                html += `<div class="form-group">
+                            <label>Bitmap HEX Data</label>
+                            <textarea style="width:100%; height:80px; background:var(--bg-input); color:white; border:1px solid var(--border); padding:5px; font-family:monospace;" onchange="updateElement(${el.id}, 'hex', this.value)">${el.hex}</textarea>
+                         </div>`;
+            } else if (el.type === 'meter') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                html += createSlider('Width', 'w', 5, state.project.width);
+                html += createSlider('Height', 'h', 2, state.project.height);
+                html += createSlider('Outline Thickness', 'thickness', 1, 10);
+                html += `<div class="prop-row" style="display:flex; gap: 5px;">${createInput('Min', 'min', 'number')} ${createInput('Max', 'max', 'number')}</div>`;
+                html += createInput('Target Variable', 'target');
+                html += createInput('Default Val (Preview)', 'val', 'number');
+            } else if (el.type === 'shape') {
+                html += `<div class="form-group">
+                            <label>Shape Type</label>
+                            <select onchange="updateElement(${el.id}, 'shapeType', this.value)">
+                                <option value="rect" ${el.shapeType==='rect'?'selected':''}>Rectangle</option>
+                                <option value="circle" ${el.shapeType==='circle'?'selected':''}>Circle</option>
+                                <option value="line" ${el.shapeType==='line'?'selected':''}>Line</option>
+                            </select>
+                         </div>`;
+                if(el.shapeType !== 'circle') {
+                    html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                }
+                html += createSlider(el.shapeType==='circle'?'Radius':'Width (X2)', 'w', 1, state.project.width);
+                if(el.shapeType !== 'circle') html += createSlider('Height (Y2)', 'h', 1, state.project.height);
+                html += createCheckbox('Fill Shape', 'fill');
+                if(!el.fill && el.shapeType !== 'line') html += createSlider('Outline Thickness', 'thickness', 1, 10);
+            }
+
+            panel.innerHTML = html;
+        }
+
+        window.syncSlider = function(id, key, value) {
+            let val = parseInt(value) || 0;
+            const s = document.getElementById(`slider-${key}`);
+            const i = document.getElementById(`input-${key}`);
+            if(s) s.value = val;
+            if(i) i.value = val;
+            
+            const el = getElements().find(e => e.id === id);
+            if(el) {
+                el[key] = val;
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.updateElement = function(id, key, value) {
+            const el = getElements().find(e => e.id === id);
+            if(el) {
+                if(typeof el[key] === 'boolean') el[key] = value;
+                else if (key === 'text' || key === 'condition' || key === 'visibilityMode' || key === 'direction' || key === 'target' || key === 'shapeType' || key === 'hex') el[key] = value;
+                else el[key] = isNaN(value) || value===''? value : Number(value);
+                
+                saveState(); 
+
+                if(key === 'fill' || key === 'alwaysVisible' || key === 'shapeType' || key === 'direction' || key === 'visibilityMode') renderProperties(); 
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.rotateElement = function(id) {
+            const el = getElements().find(e => e.id === id);
+            if(el && el.w !== undefined && el.h !== undefined) {
+                if(el.type === 'meter') el.isVertical = !el.isVertical;
+                
+                if (el.type === 'scrolling_text') {
+                    if (el.direction === 'left') el.direction = 'up';
+                    else if (el.direction === 'right') el.direction = 'down';
+                    else if (el.direction === 'up') el.direction = 'left';
+                    else if (el.direction === 'down') el.direction = 'right';
+                }
+
+                if (el.type === 'bitmap') {
+                    let hexStr = el.hex.replace(/0x/g, '').replace(/,/g, '').replace(/\s/g, '');
+                    let bytes = [];
+                    for(let i=0; i<hexStr.length; i+=2) {
+                        let byteVal = parseInt(hexStr.substring(i, i+2), 16);
+                        if(!isNaN(byteVal)) bytes.push(byteVal);
+                    }
+                    
+                    let grid = [];
+                    let byteIdx = 0, bitIdx = 0;
+                    for (let py = 0; py < el.h; py++) {
+                        grid[py] = [];
+                        for (let px = 0; px < el.w; px++) {
+                            let bit = 0;
+                            if (byteIdx < bytes.length) bit = (bytes[byteIdx] >> (7 - bitIdx)) & 1;
+                            grid[py][px] = bit;
+                            bitIdx++;
+                            if (bitIdx === 8) { bitIdx = 0; byteIdx++; }
+                        }
+                        if (bitIdx !== 0) { bitIdx = 0; byteIdx++; }
+                    }
+                    
+                    let newW = el.h; let newH = el.w;
+                    let newGrid = [];
+                    for (let py = 0; py < newH; py++) {
+                        newGrid[py] = [];
+                        for (let px = 0; px < newW; px++) {
+                            newGrid[py][px] = grid[el.h - 1 - px][py];
+                        }
+                    }
+                    
+                    let newBytes = [];
+                    for (let py = 0; py < newH; py++) {
+                        let currentByte = 0; let currentBitIdx = 0;
+                        for (let px = 0; px < newW; px++) {
+                            if (newGrid[py][px]) currentByte |= (1 << (7 - currentBitIdx));
+                            currentBitIdx++;
+                            if (currentBitIdx === 8) { newBytes.push(currentByte); currentByte = 0; currentBitIdx = 0; }
+                        }
+                        if (currentBitIdx !== 0) newBytes.push(currentByte);
+                    }
+                    
+                    el.hex = newBytes.map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(', ');
+                }
+
+                let temp = el.w; el.w = el.h; el.h = temp;
+                saveState();
+                renderProperties();
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        // --- CANVAS INTERACTION, ZOOMING & DRAGGING ---
+        function getLogicalPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.floor((e.clientX - rect.left) / state.scale),
+                y: Math.floor((e.clientY - rect.top) / state.scale)
+            };
+        }
+
+        function getBounds(el) {
+            let w=20, h=20;
+            if(el.type === 'text' || el.type === 'dynamic_text') { w = getDisplayText(el.text).length * el.size * 6; h = el.size * 8; }
+            if(el.type === 'meter' || el.type === 'shape' || el.type === 'bitmap' || el.type === 'scrolling_text') {
+                w = el.w; h = el.shapeType==='circle' ? el.w * 2 : (el.h || el.w);
+            }
+            let bx = el.shapeType === 'circle' ? el.x - el.w : el.x;
+            let by = el.shapeType === 'circle' ? el.y - el.w : el.y;
+            return { x: bx, y: by, w: Math.abs(w), h: Math.abs(h) };
+        }
+
+        canvas.addEventListener('mousedown', e => {
+            if (state.activeTool === 'move') {
+                isPanning = true; startPanMouseX = e.clientX; startPanMouseY = e.clientY;
+                initialPanX = state.panX; initialPanY = state.panY;
+                canvas.style.cursor = 'grabbing'; return;
+            }
+
+            const pos = getLogicalPos(e);
+            if(state.activeTool === 'select') {
+                let hit = null;
+                const els = getElements();
+                for(let i = els.length - 1; i >= 0; i--) {
+                    const b = getBounds(els[i]);
+                    if (pos.x >= b.x - 2 && pos.x <= b.x + b.w + 2 && pos.y >= b.y - 2 && pos.y <= b.y + b.h + 2) {
+                        hit = els[i]; break;
+                    }
+                }
+                selectElement(hit ? hit.id : null);
+                
+                if (hit && !hit.anchored) {
+                    draggingElement = hit; dragOffsetX = pos.x - hit.x; dragOffsetY = pos.y - hit.y;
+                }
+            } else if(state.activeTool === 'brush') {
+                isDrawing = true;
+                let bgs = getBgPixels();
+                if(pos.x >=0 && pos.x < state.project.width && pos.y >=0 && pos.y < state.project.height) {
+                    brushState = bgs[pos.x][pos.y] ? 0 : 1;
+                } else {
+                    brushState = 1;
+                }
+                applyBrush(pos.x, pos.y);
+            }
+        });
+
+        // Fixed early return logic so dragging safely spans whole window
+        window.addEventListener('mousemove', e => {
+            if (isPanning && state.activeTool === 'move') {
+                state.panX = initialPanX + (e.clientX - startPanMouseX);
+                state.panY = initialPanY + (e.clientY - startPanMouseY);
+                updateCanvasPosition(); return;
+            }
+
+            if(e.target !== canvas && !draggingElement && !isPanning && !isDrawing) {
+                if (state.hoverX !== null) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+                return; 
+            }
+
+            const pos = getLogicalPos(e);
+            state.hoverX = pos.x; state.hoverY = pos.y;
+            
+            if (draggingElement) {
+                draggingElement.x = pos.x - dragOffsetX; draggingElement.y = pos.y - dragOffsetY;
+                if (document.getElementById('slider-x')) {
+                    document.getElementById('slider-x').value = draggingElement.x;
+                    document.getElementById('input-x').value = draggingElement.x;
+                    document.getElementById('slider-y').value = draggingElement.y;
+                    document.getElementById('input-y').value = draggingElement.y;
+                }
+                renderCanvas();
+            } else if(isDrawing && state.activeTool === 'brush') {
+                applyBrush(pos.x, pos.y);
+            } else if (state.activeTool === 'brush') {
+                if (lastHoverX !== pos.x || lastHoverY !== pos.y) {
+                    lastHoverX = pos.x; lastHoverY = pos.y;
+                    renderCanvas();
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => { 
+            if(isPanning) { isPanning = false; if(state.activeTool === 'move') canvas.style.cursor = 'grab'; }
+            if(isDrawing) { isDrawing = false; saveState(); generateCode(); }
+            if(draggingElement) { draggingElement = null; saveState(); generateCode(); }
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            if (state.hoverX !== null && !draggingElement) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+        });
+
+        // --- RENDERING ENGINE ---
+        function drawAdafruitCircle(xc, yc, r, fill, thickness, scale) {
+            const drawPx = (px, py) => {
+                ctx.fillRect(px * scale, py * scale, scale, scale);
+            };
+
+            if (fill) {
+                for(let x = -r; x <= r; x++) {
+                    for(let y = -r; y <= r; y++) {
+                        if (x*x + y*y <= r*r) drawPx(xc + x, yc + y);
+                    }
+                }
+            } else {
+                for(let i=0; i<thickness; i++) {
+                    let currR = r - i;
+                    if(currR < 0) break;
+                    
+                    let f = 1 - currR;
+                    let ddF_x = 1;
+                    let ddF_y = -2 * currR;
+                    let x = 0;
+                    let y = currR;
+
+                    drawPx(xc, yc + currR);
+                    drawPx(xc, yc - currR);
+                    drawPx(xc + currR, yc);
+                    drawPx(xc - currR, yc);
+
+                    while (x < y) {
+                        if (f >= 0) {
+                            y--; ddF_y += 2; f += ddF_y;
+                        }
+                        x++; ddF_x += 2; f += ddF_x;
+
+                        drawPx(xc + x, yc + y);
+                        drawPx(xc - x, yc + y);
+                        drawPx(xc + x, yc - y);
+                        drawPx(xc - x, yc - y);
+                        drawPx(xc + y, yc + x);
+                        drawPx(xc - y, yc + x);
+                        drawPx(xc + y, yc - x);
+                        drawPx(xc - y, yc - x);
+                    }
+                }
+            }
+        }
+
+        function renderCanvas() {
+            ctx.imageSmoothingEnabled = false;
+
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--canvas-bg');
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.scale >= 3) {
+                ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid-line');
+                ctx.lineWidth = 1;
+                for(let x=0; x<=state.project.width; x++) { ctx.beginPath(); ctx.moveTo(x*state.scale, 0); ctx.lineTo(x*state.scale, canvas.height); ctx.stroke(); }
+                for(let y=0; y<=state.project.height; y++) { ctx.beginPath(); ctx.moveTo(0, y*state.scale); ctx.lineTo(canvas.width, y*state.scale); ctx.stroke(); }
+            }
+
+            const baseColor = '#ffffff'; 
+            ctx.fillStyle = baseColor;
+            
+            const bgs = getBgPixels();
+            for(let x=0; x<state.project.width; x++) {
+                for(let y=0; y<state.project.height; y++) {
+                    if(bgs[x][y]) ctx.fillRect(x*state.scale, y*state.scale, state.scale, state.scale);
+                }
+            }
+
+            if (state.activeTool === 'brush' && state.hoverX !== null && state.hoverY !== null) {
+                ctx.fillStyle = 'rgba(128, 128, 128, 0.6)';
+                let pixels = getBrushPixels(state.hoverX, state.hoverY);
+                pixels.forEach(p => {
+                    ctx.fillRect(p.x * state.scale, p.y * state.scale, state.scale, state.scale);
+                });
+            }
+
+            getElements().forEach(el => {
+                const sx = el.x * state.scale; const sy = el.y * state.scale;
+                
+                let elColor = (el.id === state.selectedElementId) ? '#ff3333' : baseColor;
+                ctx.fillStyle = elColor; ctx.strokeStyle = elColor;
+                ctx.lineWidth = state.scale;
+                
+                if(el.type === 'text' || el.type === 'dynamic_text') {
+                    let dispText = getDisplayText(el.text);
+                    drawGFXText(ctx, dispText, el.x, el.y, el.size, state.scale, elColor);
+                
+                } else if(el.type === 'scrolling_text') {
+                    let dispText = getDisplayText(el.text);
+                    if(el.id === state.selectedElementId) {
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        ctx.setLineDash([]);
+                    }
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(sx, sy, el.w * state.scale, el.h * state.scale);
+                    ctx.clip();
+                    drawGFXText(ctx, dispText, el.x, el.y, el.size, state.scale, elColor);
+                    ctx.restore();
+
+                } else if(el.type === 'bitmap') {
+                    if(el.hex && el.hex.trim().length > 0) {
+                        let hexStr = el.hex.replace(/0x/g, '').replace(/,/g, '').replace(/\s/g, '');
+                        let bytes = [];
+                        for(let i=0; i<hexStr.length; i+=2) {
+                            let byteVal = parseInt(hexStr.substring(i, i+2), 16);
+                            if(!isNaN(byteVal)) bytes.push(byteVal);
+                        }
+                        
+                        let byteIdx = 0; let bitIdx = 0;
+                        for (let py = 0; py < el.h; py++) {
+                            for (let px = 0; px < el.w; px++) {
+                                if (byteIdx < bytes.length) {
+                                    let bit = (bytes[byteIdx] >> (7 - bitIdx)) & 1;
+                                    if (bit) ctx.fillRect((el.x + px) * state.scale, (el.y + py) * state.scale, state.scale, state.scale);
+                                }
+                                bitIdx++;
+                                if (bitIdx === 8) { bitIdx = 0; byteIdx++; }
+                            }
+                            if (bitIdx !== 0) { bitIdx = 0; byteIdx++; } 
+                        }
+                    }
+                    if(el.id === state.selectedElementId) {
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                    }
+
+                } else if(el.type === 'meter') {
+                    let t = (el.thickness || 1) * state.scale;
+                    ctx.lineWidth = t;
+                    ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale) - t, (el.h * state.scale) - t);
+                    
+                    let pct = (el.val - el.min) / (el.max - el.min);
+                    let inX = sx + t; let inY = sy + t;
+                    let inW = (el.w * state.scale) - t*2;
+                    let inH = (el.h * state.scale) - t*2;
+                    
+                    if(pct > 0) {
+                        if(el.isVertical) {
+                            let fillH = inH * pct;
+                            if(inW > 0 && fillH > 0) ctx.fillRect(inX, inY + inH - fillH, inW, fillH);
+                        } else {
+                            let fillW = inW * pct;
+                            if(fillW > 0 && inH > 0) ctx.fillRect(inX, inY, fillW, inH);
+                        }
+                    }
+
+                } else if(el.type === 'shape') {
+                    let t = (el.thickness || 1) * state.scale;
+                    ctx.lineWidth = t;
+                    if(el.shapeType === 'rect') {
+                        if(el.fill) ctx.fillRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        else ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale)-t, (el.h * state.scale)-t);
+                    }
+                    if(el.shapeType === 'circle') {
+                        drawAdafruitCircle(el.x, el.y, el.w, el.fill, el.thickness || 1, state.scale);
+                    }
+                    if(el.shapeType === 'line') { 
+                        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo((el.x + el.w)*state.scale, (el.y + el.h)*state.scale); ctx.stroke(); 
+                    }
+                }
+            });
+            
+            renderPagesUI();
+        }
+
+        // --- CODE GENERATION ENGINE ---
+        const codeOutput = document.getElementById('code-output');
+        let codeBlocks = { init: '', setup: '', loop: '' };
+
+        function generateCode() {
+            let init = `// Auto-generated UI by Arduino Display UI Designer\n\n`;
+            init += `#include <SPI.h>\n#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n`;
+            init += `#define SCREEN_WIDTH ${state.project.width}\n#define SCREEN_HEIGHT ${state.project.height}\n#define OLED_RESET -1\n`;
+            init += `Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);\n\n`;
+            init += `String pageid = "${state.pages[0].name}"; // Active Page tracking\n`;
+
+            state.pages.forEach((page, pageIndex) => {
+                page.elements.filter(e => e.type === 'bitmap').forEach(img => {
+                    init += `\nconst unsigned char bitmap_page${pageIndex}_img_${img.id} [] PROGMEM = {\n  ${img.hex}\n};\n`;
+                });
+
+                let hasBg = page.backgroundPixels.some(col => col.some(px => px === 1));
+                if(hasBg) {
+                    let bgHex = [];
+                    for(let y=0; y<state.project.height; y++) {
+                        let byte = 0; let bit = 0;
+                        for(let x=0; x<state.project.width; x++) {
+                            if(page.backgroundPixels[x][y]) byte |= (1 << (7 - bit));
+                            bit++;
+                            if(bit === 8) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                        }
+                        if(bit !== 0) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                    }
+                    init += `\nconst unsigned char bitmap_page${pageIndex}_bg [] PROGMEM = {\n  ${bgHex.join(', ')}\n};\n`;
+                }
+            });
+
+            let setup = `void setup() {\n  Serial.begin(115200);\n\n`;
+            setup += `  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {\n    Serial.println(F("SSD1306 allocation failed"));\n    for(;;);\n  }\n`;
+            setup += `  display.clearDisplay();\n  display.setTextColor(SSD1306_WHITE);\n  display.setTextWrap(false);\n}\n`;
+
+            let loop = `void loop() {\n  display.clearDisplay();\n\n`;
+
+            state.pages.forEach((page, pageIndex) => {
+                let pageBlock = `  if (pageid == "${page.name}") {\n`;
+                
+                let hasBg = page.backgroundPixels.some(col => col.some(px => px === 1));
+                if(hasBg) pageBlock += `    display.drawBitmap(0, 0, bitmap_page${pageIndex}_bg, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);\n\n`;
+
+                page.elements.forEach((el) => {
+                    let block = ``;
+                    
+                    if(el.type === 'text' || el.type === 'dynamic_text') {
+                        let val = parseTextOutput(el.text);
+                        block += `    display.setTextSize(${el.size});\n    display.setCursor(${el.x}, ${el.y});\n    display.print(${val});\n`;
+                    }
+
+                    if(el.type === 'scrolling_text') {
+                        let val = parseTextOutput(el.text);
+                        block += `    static int16_t offset_${pageIndex}_${el.id} = 0;\n`;
+                        block += `    display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_BLACK); // Clear bounds\n`;
+                        block += `    display.setTextSize(${el.size});\n`;
+                        
+                        if (el.direction === 'left' || el.direction === 'right') {
+                            block += `    int16_t cx_${pageIndex}_${el.id} = ${el.x} + offset_${pageIndex}_${el.id};\n`;
+                            block += `    int16_t cy_${pageIndex}_${el.id} = ${el.y};\n`;
+                            block += `    String text_${pageIndex}_${el.id} = String(${val});\n`;
+                            block += `    for(uint16_t i=0; i<text_${pageIndex}_${el.id}.length(); i++) {\n`;
+                            block += `      if(cx_${pageIndex}_${el.id} >= ${el.x} && cx_${pageIndex}_${el.id} + (6*${el.size}) <= ${el.x} + ${el.w}) {\n`;
+                            block += `        display.setCursor(cx_${pageIndex}_${el.id}, cy_${pageIndex}_${el.id});\n`;
+                            block += `        display.print(text_${pageIndex}_${el.id}[i]);\n`;
+                            block += `      }\n`;
+                            block += `      cx_${pageIndex}_${el.id} += 6 * ${el.size};\n`;
+                            block += `    }\n`;
+                            
+                            if (el.direction === 'left') {
+                                block += `    offset_${pageIndex}_${el.id} -= ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} < -(int16_t)(text_${pageIndex}_${el.id}.length() * 6 * ${el.size})) offset_${pageIndex}_${el.id} = ${el.w};\n`;
+                            } else {
+                                block += `    offset_${pageIndex}_${el.id} += ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} > ${el.w}) offset_${pageIndex}_${el.id} = -(int16_t)(text_${pageIndex}_${el.id}.length() * 6 * ${el.size});\n`;
+                            }
+                        } else {
+                            block += `    int16_t cx_${pageIndex}_${el.id} = ${el.x};\n`;
+                            block += `    int16_t cy_${pageIndex}_${el.id} = ${el.y} + offset_${pageIndex}_${el.id};\n`;
+                            block += `    String text_${pageIndex}_${el.id} = String(${val});\n`;
+                            block += `    if(cy_${pageIndex}_${el.id} >= ${el.y} && cy_${pageIndex}_${el.id} + (8*${el.size}) <= ${el.y} + ${el.h}) {\n`;
+                            block += `      display.setCursor(cx_${pageIndex}_${el.id}, cy_${pageIndex}_${el.id});\n`;
+                            block += `      display.print(text_${pageIndex}_${el.id});\n`;
+                            block += `    }\n`;
+                            
+                            if (el.direction === 'up') {
+                                block += `    offset_${pageIndex}_${el.id} -= ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} < -(8*${el.size})) offset_${pageIndex}_${el.id} = ${el.h};\n`;
+                            } else {
+                                block += `    offset_${pageIndex}_${el.id} += ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} > ${el.h}) offset_${pageIndex}_${el.id} = -(8*${el.size});\n`;
+                            }
+                        }
+                    }
+                    
+                    if(el.type === 'meter') {
+                        let t = el.thickness || 1;
+                        if (t > 1) {
+                            block += `    for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                        } else {
+                            block += `    display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                        }
+                        if (el.isVertical) {
+                            block += `    display.fillRect(${el.x}+${t}, ${el.y}+${el.h}-${t} - map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), ${el.w}-${t*2}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), SSD1306_WHITE);\n`;
+                        } else {
+                            block += `    display.fillRect(${el.x}+${t}, ${el.y}+${t}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.w}-${t*2}), ${el.h}-${t*2}, SSD1306_WHITE);\n`;
+                        }
+                    }
+                    
+                    if(el.type === 'shape') {
+                        let t = el.thickness || 1;
+                        if(el.shapeType === 'rect') {
+                            if(el.fill) block += `    display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                            else if(t > 1) block += `    for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                            else block += `    display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                        }
+                        if(el.shapeType === 'circle') {
+                            if(el.fill) block += `    display.fillCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                            else if (t > 1) block += `    for(int16_t i=0; i<${t}; i++) { display.drawCircle(${el.x}, ${el.y}, ${el.w}-i, SSD1306_WHITE); }\n`;
+                            else block += `    display.drawCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                        }
+                        if(el.shapeType === 'line') block += `    display.drawLine(${el.x}, ${el.y}, ${el.x + el.w}, ${el.y + el.h}, SSD1306_WHITE);\n`;
+                    }
+
+                    if(el.type === 'bitmap') {
+                        block += `    display.drawBitmap(${el.x}, ${el.y}, bitmap_page${pageIndex}_img_${el.id}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                    }
+                    
+                    if(!el.alwaysVisible && el.condition && el.condition.trim() !== "") {
+                        let indented = block.split('\n').map(l => l ? '  ' + l : l).join('\n');
+                        if (el.visibilityMode === 'invisible_when') {
+                            pageBlock += `    if (!(${el.condition})) {\n${indented}    }\n`;
+                        } else {
+                            pageBlock += `    if (${el.condition}) {\n${indented}    }\n`;
+                        }
+                    } else {
+                        pageBlock += block;
+                    }
+                });
+
+                pageBlock += `  }\n`;
+                loop += pageBlock;
+            });
+
+            loop += `\n  display.display();\n}\n`;
+
+            codeBlocks.init = init; codeBlocks.setup = setup; codeBlocks.loop = loop;
+            codeOutput.value = `${init}\n${setup}\n${loop}`;
+        }
+
+        function copyCode(section) {
+            let text = section === 'all' ? codeOutput.value : codeBlocks[section];
+            navigator.clipboard.writeText(text);
+            const btn = event.target; const orig = btn.innerText;
+            btn.innerText = "Copied!"; setTimeout(() => btn.innerText = orig, 1500);
+        }
+    </script>
+</body>
+</html>
