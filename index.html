@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Display UI Designer (Adafruit Edition v5.2)</title>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-panel: rgba(37, 37, 38, 0.95);
+            --bg-input: #3c3c3c;
+            --text-main: #cccccc;
+            --text-light: #ffffff;
+            --accent: #007acc;
+            --accent-hover: #005f9e;
+            --border: #444444;
+            --canvas-bg: #000000;
+            --grid-line: #2a2a2a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; overflow: hidden; }
+
+        /* MODAL */
+        #setup-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: #252526; padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 400px; }
+        .modal-content h2 { color: var(--text-light); margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; }
+        select, input[type="text"], input[type="number"] { width: 100%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px; }
+        
+        /* Stylized Placeholders */
+        ::placeholder { color: #888888; font-style: italic; }
+
+        .custom-dims { display: none; gap: 10px; margin-top: 10px; }
+        button { background: var(--accent); color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; transition: background 0.2s;}
+        button:hover { background: var(--accent-hover); }
+
+        /* MAIN APP LAYOUT (Overlay System) */
+        #app-container { display: none; position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #111; }
+        
+        .panel { display: flex; flex-direction: column; }
+        .panel-header { background: #333333; padding: 10px; font-weight: bold; color: var(--text-light); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;}
+        
+        /* LEFT PANEL: Tools & Properties (Floating Overlay) */
+        .left-panel { position: absolute; top: 0; left: 0; width: 300px; height: 100%; z-index: 10; background: var(--bg-panel); border-right: 1px solid var(--border); box-shadow: 2px 0 15px rgba(0,0,0,0.6); overflow-y: auto; backdrop-filter: blur(5px); }
+        .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; border-bottom: 1px solid var(--border); }
+        .tool-btn { background: var(--bg-input); font-size: 12px; padding: 8px 5px; text-align: center; border: 1px solid transparent; cursor: pointer; color: var(--text-light); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 55px;}
+        .tool-btn.active { border-color: var(--accent); background: #2a2d2e; }
+        .tool-icon { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; margin-bottom: 4px;}
+        
+        #properties-panel { padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+        .slider-group { display: flex; align-items: center; gap: 8px; }
+        .slider-group input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-group input[type="number"] { width: 60px; padding: 4px; text-align: right; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .checkbox-group input { cursor: pointer; }
+        
+        #elements-list { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; }
+        .element-capsule { padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; text-align: center; cursor: pointer; color: white; transition: background 0.2s, border-color 0.2s; background: var(--bg-input); }
+        .element-capsule:hover { border-color: var(--accent); }
+        .element-capsule.active { background: var(--accent); border-color: var(--accent-hover); }
+
+        /* RIGHT PANEL: Code Generator (Floating Overlay) */
+        .right-panel { position: absolute; top: 0; right: 0; width: 350px; height: 100%; z-index: 10; background: var(--bg-panel); border-left: 1px solid var(--border); box-shadow: -2px 0 15px rgba(0,0,0,0.6); backdrop-filter: blur(5px); }
+        .code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; background: transparent; border-bottom: 1px solid var(--border); }
+        .code-actions button { margin: 0; font-size: 11px; padding: 6px; }
+        #code-output { flex-grow: 1; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 12px; padding: 10px; border: none; resize: none; outline: none; white-space: pre; }
+
+        /* CENTER PANEL: Canvas & Zoom */
+        .center-panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; overflow: hidden; }
+        .zoom-controls { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 5; background: var(--bg-panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; gap: 15px; padding: 10px 20px; }
+        .zoom-controls input[type="range"] { width: 150px; cursor: pointer; }
+        .zoom-controls span { font-weight: bold; font-size: 14px; min-width: 50px; text-align: right; }
+        
+        .canvas-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        #canvas-wrapper { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px solid var(--border); background: #252526; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        canvas { background: var(--canvas-bg); cursor: crosshair; image-rendering: pixelated; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="setup-modal">
+        <div class="modal-content">
+            <h2>Project Setup</h2>
+            <div class="form-group">
+                <label>Display Type</label>
+                <select id="setup-display" onchange="toggleCustomDims()">
+                    <option value="oled_128x64">OLED 128x64</option>
+                    <option value="oled_128x32">OLED 128x32</option>
+                    <option value="custom_oled">Custom OLED</option>
+                </select>
+            </div>
+            <div class="form-group custom-dims" id="custom-dims-container">
+                <input type="number" id="setup-w" placeholder="Width (px)" value="128">
+                <input type="number" id="setup-h" placeholder="Height (px)" value="64">
+            </div>
+            <button onclick="initProject()">Create Project</button>
+        </div>
+    </div>
+
+    <div id="app-container">
+        
+        <div class="panel left-panel">
+            <div class="panel-header">Tools</div>
+            <div class="tools-grid" id="tools-grid">
+                <button class="tool-btn active" onclick="setTool('select')" title="Select">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/cursor.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('move')" title="Move">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/move.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('brush')" title="Brush">
+                    <img src="https://cdn-icons-png.flaticon.com/512/103/103414.png" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('text')" title="Add Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/text.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="setTool('dynamic_text')" title="Add Functional Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/dynamictext.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="setTool('scrolling_text')" title="Add Scrolling Text">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/scrolling%20text.png?raw=true" class="tool-icon" style="filter: invert(1)">
+                </button>
+                <button class="tool-btn" onclick="setTool('meter')" title="Insert Progress Meter">
+                    <span>Progress Bar</span>
+                </button>
+                <button class="tool-btn" onclick="setTool('shape')" title="Insert Functional Shape">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/shapes.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="document.getElementById('imageUpload').click()" title="Insert Image">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/insertimage.png?raw=true" class="tool-icon">
+                </button>
+                <button class="tool-btn" onclick="deleteSelected()" title="Delete Selected (Backspace)">
+                    <img src="https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/delete.png?raw=true" class="tool-icon">
+                </button>
+            </div>
+            <input type="file" id="imageUpload" accept="image/png, image/jpeg" style="display:none" onchange="handleImageUpload(event)">
+            
+            <div class="panel-header">Properties</div>
+            <div id="properties-panel">
+                <div style="font-size:12px; color:#888;">Select an element or add a new one.</div>
+            </div>
+
+            <div class="panel-header">Elements</div>
+            <div id="elements-list"></div>
+        </div>
+
+        <div class="panel center-panel">
+            <div class="zoom-controls">
+                <button class="element-capsule" onclick="undo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Undo (Ctrl+Z)">↺ Undo</button>
+                <button class="element-capsule" onclick="redo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Redo (Ctrl+Y)">↻ Redo</button>
+                
+                <label style="margin-left: 10px;">Zoom:</label>
+                <input type="range" id="zoom-slider" min="1" max="15" value="4" oninput="setZoom(this.value)">
+                <input type="number" id="zoom-input" min="1" max="15" value="4" style="width: 50px;" onchange="setZoom(this.value)">
+                <span id="zoom-label">400%</span>
+            </div>
+            <div class="canvas-area">
+                <div id="canvas-wrapper">
+                    <canvas id="display-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right-panel">
+            <div class="code-actions">
+                <button onclick="copyCode('all')">Copy All</button>
+                <button onclick="copyCode('init')">Copy Init</button>
+                <button onclick="copyCode('setup')">Copy Setup</button>
+                <button onclick="copyCode('loop')">Copy Loop</button>
+            </div>
+            <textarea id="code-output" readonly></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        // --- STATE MANAGEMENT & HISTORY ---
+        const state = {
+            project: { width: 128, height: 64, type: 'oled_128x64' },
+            scale: 4, 
+            panX: 0, 
+            panY: 0,
+            elements: [],
+            backgroundPixels: [],
+            activeTool: 'select',
+            selectedElementId: null,
+            nextId: 1,
+            brushSize: 1,
+            hoverX: null,
+            hoverY: null
+        };
+
+        const historyStack = [];
+        let historyIndex = -1;
+
+        const canvas = document.getElementById('display-canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+        
+        let isDrawing = false;
+        let isPanning = false;
+        let brushState = 1; 
+        let draggingElement = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let startPanMouseX = 0;
+        let startPanMouseY = 0;
+        let initialPanX = 0;
+        let initialPanY = 0;
+        let lastHoverX = null;
+        let lastHoverY = null;
+
+        function saveState() {
+            if (historyIndex < historyStack.length - 1) {
+                historyStack.splice(historyIndex + 1);
+            }
+            // Deep copy critical state objects
+            historyStack.push(JSON.stringify({
+                elements: state.elements,
+                backgroundPixels: state.backgroundPixels,
+                nextId: state.nextId
+            }));
+            historyIndex++;
+        }
+
+        window.undo = function() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreState();
+            }
+        }
+
+        window.redo = function() {
+            if (historyIndex < historyStack.length - 1) {
+                historyIndex++;
+                restoreState();
+            }
+        }
+
+        function restoreState() {
+            const h = JSON.parse(historyStack[historyIndex]);
+            state.elements = h.elements;
+            state.backgroundPixels = h.backgroundPixels;
+            state.nextId = h.nextId;
+            
+            // Re-bind cached images for image elements since JSON.stringify strips HTMLImageElement
+            state.elements.forEach(el => {
+                if (el.type === 'image' && el.hex && !el.cachedImg) {
+                    // Quick placeholder redraw - complex image data recovery would need full base64 tracking
+                    el.cachedImg = null; 
+                }
+            });
+
+            renderElementsList();
+            renderProperties();
+            renderCanvas();
+            generateCode();
+        }
+
+        // --- KEYBOARD SHORTCUTS ---
+        window.addEventListener('keydown', e => {
+            const isInputMode = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+
+            // Undo (Ctrl + Z)
+            if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undo();
+            }
+            // Redo (Ctrl + Y)
+            else if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+                e.preventDefault();
+                redo();
+            }
+            // Delete Element (Backspace / Delete)
+            else if ((e.key === 'Backspace' || e.key === 'Delete') && !isInputMode) {
+                if (state.selectedElementId) {
+                    e.preventDefault();
+                    deleteSelected();
+                }
+            }
+        });
+
+        // ADAFRUIT GFX TRUE ALIGNMENT RENDERER
+        // Forces canvas to draw standard font strictly spaced at 6x8 grid intervals mimicking physical Adafruit layout
+        function drawAdafruitText(ctx, text, startX, startY, size, scale, color) {
+            ctx.fillStyle = color;
+            ctx.font = `bold ${size * 8 * scale}px 'Courier New', monospace`; // Fallback robust font
+            ctx.textBaseline = 'top';
+            for(let i = 0; i < text.length; i++) {
+                // Adafruit uses exactly 6 pixels per character width (scaled)
+                let charOffsetX = startX + (i * 6 * size * scale);
+                ctx.fillText(text[i], charOffsetX, startY);
+            }
+        }
+
+        // TEXT PARSERS (Static String vs Variable Logic)
+        function parseTextOutput(rawText) {
+            if(!rawText) return '""';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t.substring(1, t.length - 1); // Extract var
+            if (t.startsWith('"') && t.endsWith('"')) return t; // Keep quotes
+            return `"${t}"`; // Default fallback to string literal
+        }
+
+        function getDisplayText(rawText) {
+            if(!rawText) return '';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t; // Render (val) on preview
+            if (t.startsWith('"') && t.endsWith('"')) return t.substring(1, t.length - 1); // Render without quotes on preview
+            return t;
+        }
+
+        // --- SETUP PHASE ---
+        function toggleCustomDims() {
+            const val = document.getElementById('setup-display').value;
+            document.getElementById('custom-dims-container').style.display = val.includes('custom') ? 'flex' : 'none';
+        }
+
+        function initProject() {
+            const type = document.getElementById('setup-display').value;
+            state.project.type = type;
+
+            if(type === 'oled_128x64') { state.project.width = 128; state.project.height = 64; }
+            else if(type === 'oled_128x32') { state.project.width = 128; state.project.height = 32; }
+            else {
+                state.project.width = parseInt(document.getElementById('setup-w').value) || 128;
+                state.project.height = parseInt(document.getElementById('setup-h').value) || 64;
+            }
+
+            state.backgroundPixels = Array.from({length: state.project.width}, () => new Array(state.project.height).fill(0));
+            
+            state.panX = 0; state.panY = 0;
+            updateCanvasPosition();
+            updateCanvasDimensions();
+            
+            document.getElementById('setup-modal').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+
+            saveState(); // Initial save
+            renderCanvas();
+            generateCode();
+        }
+
+        function setZoom(value) {
+            let z = parseInt(value);
+            if(isNaN(z) || z < 1) z = 1;
+            if(z > 15) z = 15;
+            state.scale = z;
+            document.getElementById('zoom-slider').value = z;
+            document.getElementById('zoom-input').value = z;
+            updateCanvasDimensions();
+            renderCanvas();
+        }
+
+        function updateCanvasDimensions() {
+            canvas.width = state.project.width * state.scale;
+            canvas.height = state.project.height * state.scale;
+            document.getElementById('zoom-label').innerText = `${state.scale * 100}%`;
+        }
+
+        function updateCanvasPosition() {
+            canvasWrapper.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
+        }
+
+        // --- TOOLS & ELEMENT CREATION ---
+        function setTool(tool) {
+            state.activeTool = tool;
+            const btns = document.querySelectorAll('.tool-btn');
+            btns.forEach(btn => btn.classList.remove('active'));
+            if(event && event.currentTarget) event.currentTarget.classList.add('active');
+            
+            if (tool === 'brush') {
+                state.selectedElementId = null;
+                renderProperties();
+                renderElementsList();
+                canvas.style.cursor = 'none';
+            } else {
+                canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
+            }
+
+            if(tool !== 'select' && tool !== 'move' && tool !== 'brush' && tool !== 'delete') {
+                createElement(tool);
+                setTool('select'); 
+                btns[0].classList.add('active');
+            }
+        }
+
+        function getSelected() { return state.elements.find(e => e.id === state.selectedElementId); }
+
+        function deleteSelected() {
+            if(state.selectedElementId) {
+                state.elements = state.elements.filter(e => e.id !== state.selectedElementId);
+                state.selectedElementId = null;
+                saveState();
+                renderProperties();
+                renderElementsList();
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        function createElement(type) {
+            const el = { id: state.nextId++, type: type, x: 10, y: 10, condition: '', alwaysVisible: true, visibilityMode: 'visible_when', anchored: false };
+            
+            if(type === 'text') { el.text = '"Hello World"'; el.size = 1; }
+            if(type === 'dynamic_text') { el.text = '(sensorVal)'; el.size = 1; }
+            if(type === 'scrolling_text') { el.text = '"Scrolling Msg"'; el.size = 1; el.w = 50; el.h = 10; el.speed = 2; el.direction = 'left'; }
+            if(type === 'meter') { el.w = 50; el.h = 10; el.min = 0; el.max = 100; el.val = 50; el.target = 'temp'; el.thickness = 1; el.isVertical = false; }
+            if(type === 'shape') { el.shapeType = 'rect'; el.w = 20; el.h = 20; el.fill = false; el.thickness = 1; }
+            
+            state.elements.push(el);
+            state.selectedElementId = el.id;
+            
+            saveState();
+            renderProperties();
+            renderElementsList();
+            renderCanvas();
+            generateCode();
+        }
+
+        // --- BRUSH LOGIC ---
+        function getBrushPixels(cx, cy) {
+            let pixels = [];
+            for (let x = cx - Math.floor(state.brushSize); x <= cx + Math.floor(state.brushSize); x++) {
+                for (let y = cy - Math.floor(state.brushSize); y <= cy + Math.floor(state.brushSize); y++) {
+                    let offset = (state.brushSize % 2 === 0) ? 0.5 : 0;
+                    let dx = x - cx - offset;
+                    let dy = y - cy - offset;
+                    if (dx*dx + dy*dy <= (state.brushSize/2)*(state.brushSize/2) || state.brushSize === 1) {
+                        if (state.brushSize === 1 && (x !== cx || y !== cy)) continue; 
+                        pixels.push({x, y});
+                    }
+                }
+            }
+            return pixels;
+        }
+
+        function applyBrush(cx, cy) {
+            let pixels = getBrushPixels(cx, cy);
+            pixels.forEach(p => {
+                if(p.x >= 0 && p.x < state.project.width && p.y >= 0 && p.y < state.project.height) {
+                    state.backgroundPixels[p.x][p.y] = brushState;
+                }
+            });
+            renderCanvas();
+        }
+
+        window.updateBrushSize = function(val) {
+            let size = parseInt(val);
+            if (isNaN(size) || size < 1) size = 1;
+            state.brushSize = size;
+            const s = document.getElementById('slider-brushSize');
+            const i = document.getElementById('input-brushSize');
+            if(s) s.value = size;
+            if(i) i.value = size;
+            renderCanvas(); 
+        }
+
+        // --- UI RENDERERS ---
+        function renderElementsList() {
+            const list = document.getElementById('elements-list');
+            list.innerHTML = '';
+            if(state.elements.length === 0) {
+                list.innerHTML = '<div style="font-size:12px; color:#888; text-align:center;">No elements added yet.</div>'; return;
+            }
+            state.elements.forEach((el, index) => {
+                const isActive = el.id === state.selectedElementId ? 'active' : '';
+                const typeName = el.type.replace('_', ' ').toUpperCase();
+                list.innerHTML += `<div class="element-capsule ${isActive}" onclick="selectElement(${el.id})">${index + 1}. ${typeName}</div>`;
+            });
+        }
+
+        window.selectElement = function(id) {
+            state.selectedElementId = id;
+            if(state.activeTool === 'brush') setTool('select'); 
+            renderProperties();
+            renderElementsList();
+            renderCanvas();
+        }
+
+        function renderProperties() {
+            const panel = document.getElementById('properties-panel');
+            panel.innerHTML = '';
+            
+            if (state.activeTool === 'brush') {
+                panel.innerHTML = `
+                    <div class="form-group">
+                        <label>Brush Size (Radius)</label>
+                        <div class="slider-group">
+                            <input type="range" id="slider-brushSize" min="1" max="15" value="${state.brushSize}" oninput="updateBrushSize(this.value)">
+                            <input type="number" id="input-brushSize" min="1" max="15" value="${state.brushSize}" onchange="updateBrushSize(this.value)">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#aaa; margin-top: 10px; line-height:1.4;">
+                        Draw directly on the canvas.<br><br>Click to place pixels, click on existing pixels to erase.
+                    </div>
+                `;
+                return;
+            }
+
+            const el = getSelected();
+            if(!el) { panel.innerHTML = '<div style="font-size:12px; color:#888;">Select an element to view properties.</div>'; return; }
+
+            const createInput = (label, key, type='text', placeholder='') => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <input type="${type}" id="prop-${key}" placeholder='${placeholder}' value='${el[key] !== undefined ? el[key] : ''}' onchange="updateElement(${el.id}, '${key}', this.value)">
+                </div>`;
+
+            const createSlider = (label, key, min, max) => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <div class="slider-group">
+                        <input type="range" id="slider-${key}" min="${min}" max="${max}" value="${el[key]}" oninput="syncSlider(${el.id}, '${key}', this.value)">
+                        <input type="number" id="input-${key}" value="${el[key]}" onchange="syncSlider(${el.id}, '${key}', this.value)">
+                    </div>
+                </div>`;
+
+            const createCheckbox = (label, key) => `
+                <label class="checkbox-group form-group">
+                    <input type="checkbox" ${el[key] ? 'checked' : ''} onchange="updateElement(${el.id}, '${key}', this.checked)">
+                    ${label}
+                </label>`;
+
+            let html = createSlider('X Position', 'x', -50, state.project.width + 50);
+            html += createSlider('Y Position', 'y', -50, state.project.height + 50);
+            html += createCheckbox('Anchor (Lock Position)', 'anchored');
+            html += createCheckbox('Always Visible', 'alwaysVisible');
+            
+            if(!el.alwaysVisible) {
+                html += `<div class="form-group" style="display:flex; gap: 5px; align-items:center;">
+                            <select id="prop-visibilityMode" style="width: 45%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" onchange="updateElement(${el.id}, 'visibilityMode', this.value)">
+                                <option value="visible_when" ${el.visibilityMode==='visible_when'?'selected':''}>Visible When</option>
+                                <option value="invisible_when" ${el.visibilityMode==='invisible_when'?'selected':''}>Invisible When</option>
+                            </select>
+                            <input type="text" id="prop-condition" style="width: 55%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" placeholder="e.g. var == 1" value="${el.condition !== undefined ? el.condition : ''}" onchange="updateElement(${el.id}, 'condition', this.value)">
+                         </div>`;
+            }
+
+            let textPlaceholder = 'e.g., "Hello world" or (sensorval)';
+            if (el.type === 'text') textPlaceholder = 'e.g., "Hello World" displayed as Hello World';
+            else if (el.type === 'dynamic_text') textPlaceholder = '(val) displayed as 1 if val == 1;';
+            else if (el.type === 'scrolling_text') textPlaceholder = 'e.g., "Hello World" or (sensorval)';
+
+            if(el.type === 'text' || el.type === 'dynamic_text') {
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+            } else if (el.type === 'scrolling_text') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90° (Swap Bounds)</button>`;
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+                html += createSlider('Box Width', 'w', 5, state.project.width);
+                html += createSlider('Box Height', 'h', 5, state.project.height);
+                html += createSlider('Scroll Speed', 'speed', 1, 10);
+                html += `<div class="form-group">
+                            <label>Scroll Direction</label>
+                            <select onchange="updateElement(${el.id}, 'direction', this.value)">
+                                <option value="left" ${el.direction==='left'?'selected':''}>Left ←</option>
+                                <option value="right" ${el.direction==='right'?'selected':''}>Right → </option>
+                                <option value="up" ${el.direction==='up'?'selected':''}>Up ↑</option>
+                                <option value="down" ${el.direction==='down'?'selected':''}>Down ↓</option>
+                            </select>
+                         </div>`;
+            } else if (el.type === 'meter') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                html += createSlider('Width', 'w', 5, state.project.width);
+                html += createSlider('Height', 'h', 2, state.project.height);
+                html += createSlider('Outline Thickness', 'thickness', 1, 10);
+                html += `<div class="prop-row" style="display:flex; gap: 5px;">${createInput('Min', 'min', 'number')} ${createInput('Max', 'max', 'number')}</div>`;
+                html += createInput('Target Variable', 'target');
+                html += createInput('Default Val (Preview)', 'val', 'number');
+            } else if (el.type === 'shape') {
+                html += `<div class="form-group">
+                            <label>Shape Type</label>
+                            <select onchange="updateElement(${el.id}, 'shapeType', this.value)">
+                                <option value="rect" ${el.shapeType==='rect'?'selected':''}>Rectangle</option>
+                                <option value="circle" ${el.shapeType==='circle'?'selected':''}>Circle</option>
+                                <option value="line" ${el.shapeType==='line'?'selected':''}>Line</option>
+                            </select>
+                         </div>`;
+                if(el.shapeType !== 'circle') {
+                    html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                }
+                html += createSlider(el.shapeType==='circle'?'Radius':'Width (X2)', 'w', 1, state.project.width);
+                if(el.shapeType !== 'circle') html += createSlider('Height (Y2)', 'h', 1, state.project.height);
+                html += createCheckbox('Fill Shape', 'fill');
+                if(!el.fill && el.shapeType !== 'line') html += createSlider('Outline Thickness', 'thickness', 1, 10);
+            }
+
+            panel.innerHTML = html;
+        }
+
+        window.syncSlider = function(id, key, value) {
+            let val = parseInt(value) || 0;
+            const s = document.getElementById(`slider-${key}`);
+            const i = document.getElementById(`input-${key}`);
+            if(s) s.value = val;
+            if(i) i.value = val;
+            
+            // Only update live visual state, don't save to history while sliding (prevent spam)
+            const el = state.elements.find(e => e.id === id);
+            if(el) {
+                el[key] = val;
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.updateElement = function(id, key, value) {
+            const el = state.elements.find(e => e.id === id);
+            if(el) {
+                if(typeof el[key] === 'boolean') el[key] = value;
+                else if (key === 'text' || key === 'condition' || key === 'visibilityMode' || key === 'direction' || key === 'target' || key === 'shapeType') el[key] = value;
+                else el[key] = isNaN(value) || value===''? value : Number(value);
+                
+                saveState(); // Commit change to history
+
+                if(key === 'fill' || key === 'alwaysVisible' || key === 'shapeType' || key === 'direction' || key === 'visibilityMode') renderProperties(); 
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.rotateElement = function(id) {
+            const el = state.elements.find(e => e.id === id);
+            if(el && el.w !== undefined && el.h !== undefined) {
+                if(el.type === 'meter') el.isVertical = !el.isVertical;
+                
+                if (el.type === 'scrolling_text') {
+                    if (el.direction === 'left') el.direction = 'up';
+                    else if (el.direction === 'right') el.direction = 'down';
+                    else if (el.direction === 'up') el.direction = 'left';
+                    else if (el.direction === 'down') el.direction = 'right';
+                }
+
+                let temp = el.w; el.w = el.h; el.h = temp;
+                saveState();
+                renderProperties();
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        // --- CANVAS INTERACTION, ZOOMING & DRAGGING ---
+        function getLogicalPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.floor((e.clientX - rect.left) / state.scale),
+                y: Math.floor((e.clientY - rect.top) / state.scale)
+            };
+        }
+
+        function getBounds(el) {
+            let w=20, h=20;
+            if(el.type === 'text' || el.type === 'dynamic_text') { w = el.text.length * el.size * 6; h = el.size * 8; }
+            if(el.type === 'meter' || el.type === 'shape' || el.type === 'image' || el.type === 'scrolling_text') {
+                w = el.w; h = el.shapeType==='circle' ? el.w * 2 : (el.h || el.w);
+            }
+            let bx = el.shapeType === 'circle' ? el.x - el.w : el.x;
+            let by = el.shapeType === 'circle' ? el.y - el.w : el.y;
+            return { x: bx, y: by, w: Math.abs(w), h: Math.abs(h) };
+        }
+
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY < 0 ? 1 : -1;
+            let oldScale = state.scale;
+            let newScale = state.scale + zoomAmount;
+            
+            if(newScale < 1) newScale = 1;
+            if(newScale > 15) newScale = 15;
+            
+            if(newScale !== oldScale) {
+                const wrapperRect = canvasWrapper.getBoundingClientRect();
+                let cx = e.clientX - (wrapperRect.left + wrapperRect.width/2);
+                let cy = e.clientY - (wrapperRect.top + wrapperRect.height/2);
+                
+                let dx = cx * (newScale / oldScale - 1);
+                let dy = cy * (newScale / oldScale - 1);
+                
+                state.panX -= dx;
+                state.panY -= dy;
+                
+                state.scale = newScale;
+                document.getElementById('zoom-slider').value = newScale;
+                document.getElementById('zoom-input').value = newScale;
+                
+                updateCanvasDimensions();
+                updateCanvasPosition();
+                renderCanvas();
+            }
+        }, {passive: false});
+
+        canvas.addEventListener('mousedown', e => {
+            if (state.activeTool === 'move') {
+                isPanning = true; startPanMouseX = e.clientX; startPanMouseY = e.clientY;
+                initialPanX = state.panX; initialPanY = state.panY;
+                canvas.style.cursor = 'grabbing'; return;
+            }
+
+            const pos = getLogicalPos(e);
+            if(state.activeTool === 'select') {
+                let hit = null;
+                for(let i = state.elements.length - 1; i >= 0; i--) {
+                    const b = getBounds(state.elements[i]);
+                    if (pos.x >= b.x - 2 && pos.x <= b.x + b.w + 2 && pos.y >= b.y - 2 && pos.y <= b.y + b.h + 2) {
+                        hit = state.elements[i]; break;
+                    }
+                }
+                selectElement(hit ? hit.id : null);
+                
+                if (hit && !hit.anchored) {
+                    draggingElement = hit; dragOffsetX = pos.x - hit.x; dragOffsetY = pos.y - hit.y;
+                }
+            } else if(state.activeTool === 'brush') {
+                isDrawing = true;
+                if(pos.x >=0 && pos.x < state.project.width && pos.y >=0 && pos.y < state.project.height) {
+                    brushState = state.backgroundPixels[pos.x][pos.y] ? 0 : 1;
+                } else {
+                    brushState = 1;
+                }
+                applyBrush(pos.x, pos.y);
+            }
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (isPanning && state.activeTool === 'move') {
+                state.panX = initialPanX + (e.clientX - startPanMouseX);
+                state.panY = initialPanY + (e.clientY - startPanMouseY);
+                updateCanvasPosition(); return;
+            }
+
+            if(e.target !== canvas) {
+                if (state.hoverX !== null) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+                return; 
+            }
+            const pos = getLogicalPos(e);
+            state.hoverX = pos.x; state.hoverY = pos.y;
+            
+            if (draggingElement) {
+                draggingElement.x = pos.x - dragOffsetX; draggingElement.y = pos.y - dragOffsetY;
+                if (document.getElementById('slider-x')) {
+                    document.getElementById('slider-x').value = draggingElement.x;
+                    document.getElementById('input-x').value = draggingElement.x;
+                    document.getElementById('slider-y').value = draggingElement.y;
+                    document.getElementById('input-y').value = draggingElement.y;
+                }
+                renderCanvas();
+            } else if(isDrawing && state.activeTool === 'brush') {
+                applyBrush(pos.x, pos.y);
+            } else if (state.activeTool === 'brush') {
+                if (lastHoverX !== pos.x || lastHoverY !== pos.y) {
+                    lastHoverX = pos.x; lastHoverY = pos.y;
+                    renderCanvas();
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => { 
+            if(isPanning) { isPanning = false; if(state.activeTool === 'move') canvas.style.cursor = 'grab'; }
+            if(isDrawing) { isDrawing = false; saveState(); generateCode(); }
+            if(draggingElement) { draggingElement = null; saveState(); generateCode(); }
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            if (state.hoverX !== null) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+        });
+
+        // --- RENDERING ENGINE ---
+        function drawAdafruitCircle(xc, yc, r, fill, thickness, scale) {
+            const drawPx = (px, py) => {
+                ctx.fillRect(px * scale, py * scale, scale, scale);
+            };
+
+            if (fill) {
+                for(let x = -r; x <= r; x++) {
+                    for(let y = -r; y <= r; y++) {
+                        if (x*x + y*y <= r*r) drawPx(xc + x, yc + y);
+                    }
+                }
+            } else {
+                for(let i=0; i<thickness; i++) {
+                    let currR = r - i;
+                    if(currR < 0) break;
+                    
+                    let f = 1 - currR;
+                    let ddF_x = 1;
+                    let ddF_y = -2 * currR;
+                    let x = 0;
+                    let y = currR;
+
+                    drawPx(xc, yc + currR);
+                    drawPx(xc, yc - currR);
+                    drawPx(xc + currR, yc);
+                    drawPx(xc - currR, yc);
+
+                    while (x < y) {
+                        if (f >= 0) {
+                            y--; ddF_y += 2; f += ddF_y;
+                        }
+                        x++; ddF_x += 2; f += ddF_x;
+
+                        drawPx(xc + x, yc + y);
+                        drawPx(xc - x, yc + y);
+                        drawPx(xc + x, yc - y);
+                        drawPx(xc - x, yc - y);
+                        drawPx(xc + y, yc + x);
+                        drawPx(xc - y, yc + x);
+                        drawPx(xc + y, yc - x);
+                        drawPx(xc - y, yc - x);
+                    }
+                }
+            }
+        }
+
+        function renderCanvas() {
+            // Keep native text clean by disabling smoothing
+            ctx.imageSmoothingEnabled = false;
+
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--canvas-bg');
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.scale >= 3) {
+                ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid-line');
+                ctx.lineWidth = 1;
+                for(let x=0; x<=state.project.width; x++) { ctx.beginPath(); ctx.moveTo(x*state.scale, 0); ctx.lineTo(x*state.scale, canvas.height); ctx.stroke(); }
+                for(let y=0; y<=state.project.height; y++) { ctx.beginPath(); ctx.moveTo(0, y*state.scale); ctx.lineTo(canvas.width, y*state.scale); ctx.stroke(); }
+            }
+
+            const baseColor = '#ffffff'; 
+            ctx.fillStyle = baseColor;
+            
+            // BG Pixels
+            for(let x=0; x<state.project.width; x++) {
+                for(let y=0; y<state.project.height; y++) {
+                    if(state.backgroundPixels[x][y]) ctx.fillRect(x*state.scale, y*state.scale, state.scale, state.scale);
+                }
+            }
+
+            // Brush Preview Overlay
+            if (state.activeTool === 'brush' && state.hoverX !== null && state.hoverY !== null) {
+                ctx.fillStyle = 'rgba(128, 128, 128, 0.6)';
+                let pixels = getBrushPixels(state.hoverX, state.hoverY);
+                pixels.forEach(p => {
+                    ctx.fillRect(p.x * state.scale, p.y * state.scale, state.scale, state.scale);
+                });
+            }
+
+            // Elements
+            state.elements.forEach(el => {
+                const sx = el.x * state.scale; const sy = el.y * state.scale;
+                
+                let elColor = (el.id === state.selectedElementId) ? '#ff3333' : baseColor;
+                ctx.fillStyle = elColor; ctx.strokeStyle = elColor;
+                ctx.lineWidth = state.scale;
+                
+                if(el.type === 'text' || el.type === 'dynamic_text') {
+                    let dispText = getDisplayText(el.text);
+                    drawAdafruitText(ctx, dispText, sx, sy, el.size, state.scale, elColor);
+                
+                } else if(el.type === 'scrolling_text') {
+                    let dispText = getDisplayText(el.text);
+                    if(el.id === state.selectedElementId) {
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        ctx.setLineDash([]);
+                    }
+
+                    // Perfect Bound Clipping
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(sx, sy, el.w * state.scale, el.h * state.scale);
+                    ctx.clip();
+                    drawAdafruitText(ctx, dispText, sx, sy, el.size, state.scale, elColor);
+                    ctx.restore();
+
+                } else if(el.type === 'meter') {
+                    let t = (el.thickness || 1) * state.scale;
+                    ctx.lineWidth = t;
+                    ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale) - t, (el.h * state.scale) - t);
+                    
+                    let pct = (el.val - el.min) / (el.max - el.min);
+                    let inX = sx + t; let inY = sy + t;
+                    let inW = (el.w * state.scale) - t*2;
+                    let inH = (el.h * state.scale) - t*2;
+                    
+                    if(pct > 0) {
+                        if(el.isVertical) {
+                            let fillH = inH * pct;
+                            if(inW > 0 && fillH > 0) ctx.fillRect(inX, inY + inH - fillH, inW, fillH);
+                        } else {
+                            let fillW = inW * pct;
+                            if(fillW > 0 && inH > 0) ctx.fillRect(inX, inY, fillW, inH);
+                        }
+                    }
+
+                } else if(el.type === 'shape') {
+                    let t = (el.thickness || 1) * state.scale;
+                    ctx.lineWidth = t;
+                    if(el.shapeType === 'rect') {
+                        if(el.fill) ctx.fillRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        else ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale)-t, (el.h * state.scale)-t);
+                    }
+                    if(el.shapeType === 'circle') {
+                        drawAdafruitCircle(el.x, el.y, el.w, el.fill, el.thickness || 1, state.scale);
+                    }
+                    if(el.shapeType === 'line') { 
+                        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo((el.x + el.w)*state.scale, (el.y + el.h)*state.scale); ctx.stroke(); 
+                    }
+                } else if(el.type === 'image') {
+                    if (el.cachedImg) {
+                        ctx.drawImage(el.cachedImg, sx, sy, el.w * state.scale, el.h * state.scale);
+                        if(el.id === state.selectedElementId) { ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale); }
+                    } else {
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        ctx.font = `${8 * state.scale}px monospace`;
+                        ctx.textBaseline = 'top'; 
+                        ctx.fillText('IMG', sx+2, sy+2);
+                    }
+                }
+            });
+        }
+
+        // --- CODE GENERATION ENGINE ---
+        const codeOutput = document.getElementById('code-output');
+        let codeBlocks = { init: '', setup: '', loop: '' };
+
+        function generateCode() {
+            let init = `// Auto-generated UI by Arduino Display UI Designer\n\n`;
+            init += `#include <SPI.h>\n#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n`;
+            init += `#define SCREEN_WIDTH ${state.project.width}\n#define SCREEN_HEIGHT ${state.project.height}\n#define OLED_RESET -1\n`;
+            init += `Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);\n`;
+
+            state.elements.filter(e => e.type === 'image').forEach(img => {
+                init += `\nconst unsigned char bitmap_img_${img.id} [] PROGMEM = {\n  ${img.hex}\n};\n`;
+            });
+
+            let hasBg = state.backgroundPixels.some(col => col.some(px => px === 1));
+            if(hasBg) {
+                let bgHex = [];
+                for(let y=0; y<state.project.height; y++) {
+                    let byte = 0; let bit = 0;
+                    for(let x=0; x<state.project.width; x++) {
+                        if(state.backgroundPixels[x][y]) byte |= (1 << (7 - bit));
+                        bit++;
+                        if(bit === 8) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                    }
+                    if(bit !== 0) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                }
+                init += `\nconst unsigned char bitmap_background [] PROGMEM = {\n  ${bgHex.join(', ')}\n};\n`;
+            }
+
+            let setup = `void setup() {\n  Serial.begin(115200);\n\n`;
+            setup += `  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {\n    Serial.println(F("SSD1306 allocation failed"));\n    for(;;);\n  }\n`;
+            setup += `  display.clearDisplay();\n  display.setTextColor(SSD1306_WHITE);\n  display.setTextWrap(false);\n}\n`;
+
+            let loop = `void loop() {\n  display.clearDisplay();\n\n`;
+            if(hasBg) loop += `  display.drawBitmap(0, 0, bitmap_background, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);\n`;
+
+            state.elements.forEach((el, index) => {
+                let block = ``;
+                
+                if(el.type === 'text' || el.type === 'dynamic_text') {
+                    let val = parseTextOutput(el.text);
+                    block += `  display.setTextSize(${el.size});\n  display.setCursor(${el.x}, ${el.y});\n  display.print(${val});\n`;
+                }
+
+                if(el.type === 'scrolling_text') {
+                    let val = parseTextOutput(el.text);
+                    block += `  static int16_t offset_${el.id} = 0;\n`;
+                    block += `  display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_BLACK); // Clear bounds\n`;
+                    block += `  display.setTextSize(${el.size});\n`;
+                    
+                    if (el.direction === 'left' || el.direction === 'right') {
+                        block += `  int16_t cx_${el.id} = ${el.x} + offset_${el.id};\n`;
+                        block += `  int16_t cy_${el.id} = ${el.y};\n`;
+                        block += `  String text_${el.id} = String(${val});\n`;
+                        block += `  for(uint16_t i=0; i<text_${el.id}.length(); i++) {\n`;
+                        block += `    if(cx_${el.id} >= ${el.x} && cx_${el.id} + (6*${el.size}) <= ${el.x} + ${el.w}) {\n`;
+                        block += `      display.setCursor(cx_${el.id}, cy_${el.id});\n`;
+                        block += `      display.print(text_${el.id}[i]);\n`;
+                        block += `    }\n`;
+                        block += `    cx_${el.id} += 6 * ${el.size};\n`;
+                        block += `  }\n`;
+                        
+                        if (el.direction === 'left') {
+                            block += `  offset_${el.id} -= ${el.speed};\n`;
+                            block += `  if(offset_${el.id} < -(int16_t)(text_${el.id}.length() * 6 * ${el.size})) offset_${el.id} = ${el.w};\n`;
+                        } else {
+                            block += `  offset_${el.id} += ${el.speed};\n`;
+                            block += `  if(offset_${el.id} > ${el.w}) offset_${el.id} = -(int16_t)(text_${el.id}.length() * 6 * ${el.size});\n`;
+                        }
+                    } else {
+                        block += `  int16_t cx_${el.id} = ${el.x};\n`;
+                        block += `  int16_t cy_${el.id} = ${el.y} + offset_${el.id};\n`;
+                        block += `  String text_${el.id} = String(${val});\n`;
+                        block += `  if(cy_${el.id} >= ${el.y} && cy_${el.id} + (8*${el.size}) <= ${el.y} + ${el.h}) {\n`;
+                        block += `    display.setCursor(cx_${el.id}, cy_${el.id});\n`;
+                        block += `    display.print(text_${el.id});\n`;
+                        block += `  }\n`;
+                        
+                        if (el.direction === 'up') {
+                            block += `  offset_${el.id} -= ${el.speed};\n`;
+                            block += `  if(offset_${el.id} < -(8*${el.size})) offset_${el.id} = ${el.h};\n`;
+                        } else {
+                            block += `  offset_${el.id} += ${el.speed};\n`;
+                            block += `  if(offset_${el.id} > ${el.h}) offset_${el.id} = -(8*${el.size});\n`;
+                        }
+                    }
+                }
+                
+                if(el.type === 'meter') {
+                    let t = el.thickness || 1;
+                    if (t > 1) {
+                        block += `  for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                    } else {
+                        block += `  display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                    }
+                    if (el.isVertical) {
+                        block += `  display.fillRect(${el.x}+${t}, ${el.y}+${el.h}-${t} - map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), ${el.w}-${t*2}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), SSD1306_WHITE);\n`;
+                    } else {
+                        block += `  display.fillRect(${el.x}+${t}, ${el.y}+${t}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.w}-${t*2}), ${el.h}-${t*2}, SSD1306_WHITE);\n`;
+                    }
+                }
+                
+                if(el.type === 'shape') {
+                    let t = el.thickness || 1;
+                    if(el.shapeType === 'rect') {
+                        if(el.fill) block += `  display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                        else if(t > 1) block += `  for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                        else block += `  display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                    }
+                    if(el.shapeType === 'circle') {
+                        if(el.fill) block += `  display.fillCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                        else if (t > 1) block += `  for(int16_t i=0; i<${t}; i++) { display.drawCircle(${el.x}, ${el.y}, ${el.w}-i, SSD1306_WHITE); }\n`;
+                        else block += `  display.drawCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                    }
+                    if(el.shapeType === 'line') block += `  display.drawLine(${el.x}, ${el.y}, ${el.x + el.w}, ${el.y + el.h}, SSD1306_WHITE);\n`;
+                }
+
+                if(el.type === 'image') block += `  display.drawBitmap(${el.x}, ${el.y}, bitmap_img_${el.id}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                
+                if(!el.alwaysVisible && el.condition && el.condition.trim() !== "") {
+                    let indented = block.split('\n').map(l => l ? '  ' + l : l).join('\n');
+                    if (el.visibilityMode === 'invisible_when') {
+                        loop += `  if (!(${el.condition})) {\n${indented}  }\n`;
+                    } else {
+                        loop += `  if (${el.condition}) {\n${indented}  }\n`;
+                    }
+                } else {
+                    loop += block;
+                }
+            });
+
+            loop += `\n  display.display();\n}\n`;
+
+            codeBlocks.init = init; codeBlocks.setup = setup; codeBlocks.loop = loop;
+            codeOutput.value = `${init}\n${setup}\n${loop}`;
+        }
+
+        function copyCode(section) {
+            let text = section === 'all' ? codeOutput.value : codeBlocks[section];
+            navigator.clipboard.writeText(text);
+            const btn = event.target; const orig = btn.innerText;
+            btn.innerText = "Copied!"; setTimeout(() => btn.innerText = orig, 1500);
+        }
+
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const offCV = document.createElement('canvas'); const octx = offCV.getContext('2d');
+                    let iw = img.width; let ih = img.height;
+                    if(iw > state.project.width) { ih = Math.floor(ih * (state.project.width/iw)); iw = state.project.width; }
+                    offCV.width = iw; offCV.height = ih; octx.drawImage(img, 0, 0, iw, ih);
+                    const imgData = octx.getImageData(0, 0, iw, ih).data; let hexArray = [];
+                    
+                    const monoCV = document.createElement('canvas'); monoCV.width = iw; monoCV.height = ih;
+                    const mctx = monoCV.getContext('2d');
+                    const whiteData = mctx.createImageData(iw, ih);
+
+                    for(let y=0; y<ih; y++) {
+                        let byte = 0; let bit = 0;
+                        for(let x=0; x<iw; x++) {
+                            const idx = (y * iw + x) * 4;
+                            const avg = (imgData[idx] + imgData[idx+1] + imgData[idx+2]) / 3;
+                            if(avg < 128) {
+                                byte |= (1 << (7 - bit));
+                                whiteData.data[idx] = 255; whiteData.data[idx+1] = 255;
+                                whiteData.data[idx+2] = 255; whiteData.data[idx+3] = 255;
+                            } else { whiteData.data[idx+3] = 0; }
+                            bit++;
+                            if(bit === 8) { hexArray.push("0x" + byte.toString(16).padStart(2, '0')); byte = 0; bit = 0; }
+                        }
+                        if(bit !== 0) { hexArray.push("0x" + byte.toString(16).padStart(2, '0')); byte = 0; bit = 0; }
+                    }
+                    
+                    mctx.putImageData(whiteData, 0, 0);
+                    const cachedImg = new Image();
+                    cachedImg.src = monoCV.toDataURL();
+
+                    state.elements.push({ 
+                        id: state.nextId++, type: 'image', x: 0, y: 0, w: iw, h: ih, 
+                        hex: hexArray.join(', '), cachedImg: cachedImg,
+                        condition: '', alwaysVisible: true, visibilityMode: 'visible_when', anchored: false 
+                    });
+                    
+                    cachedImg.onload = () => { saveState(); renderElementsList(); renderCanvas(); generateCode(); };
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+</html>
