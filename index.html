@@ -1,0 +1,2381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Display UI Designer v6.7 (by Mateous)</title>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-panel: rgba(37, 37, 38, 0.95);
+            --bg-input: #3c3c3c;
+            --text-main: #cccccc;
+            --text-light: #e2e2e2;
+            --accent: #007acc;
+            --accent-hover: #005f9e;
+            --border: #444444;
+            --canvas-bg: #0c0c0c;
+            --grid-line: #2a2a2a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; overflow: hidden; }
+
+        /* MODALS */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: #252526; padding: 30px; border-radius: 8px; border: 1px solid var(--border); width: 400px; text-align: center; }
+        .modal-content h2 { color: var(--text-light); margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; text-align: left;}
+        label { display: block; margin-bottom: 5px; font-size: 14px; }
+        select, input[type="text"], input[type="number"] { width: 100%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px; }
+        
+        ::placeholder { color: #888888; font-style: italic; }
+        .custom-dims { display: none; gap: 10px; margin-top: 10px; }
+        button { background: var(--accent); color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; margin-top: 10px; transition: background 0.2s;}
+        button:hover { background: var(--accent-hover); }
+
+        /* WARNING MODAL SPECIFICS */
+        #warning-modal .modal-content { border-color: #ff5555; box-shadow: 0 0 20px rgba(255, 85, 85, 0.2); }
+        #warning-modal button { background: #ff5555; }
+        #warning-modal button:hover { background: #cc0000; }
+
+        /* SCREEN ORIENTATION BOXES */
+        .orientation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .orientation-box { background: var(--bg-input); border: 2px solid var(--border); border-radius: 8px; padding: 15px 10px; cursor: pointer; text-align: center; transition: all 0.2s; user-select: none;}
+        .orientation-box:hover { border-color: #888; background: #444; }
+        .orientation-box.active { border-color: var(--accent); background: #2a2d2e; box-shadow: 0 0 10px rgba(0, 122, 204, 0.4); }
+        .orientation-box img { width: 60px; height: auto; margin-bottom: 10px; filter: invert(1); opacity: 0.7; transition: opacity 0.2s;}
+        .orientation-box.active img { opacity: 1; filter: invert(1) drop-shadow(0px 0px 5px var(--accent));}
+        .orientation-box p { font-size: 12px; margin: 2px 0; color: var(--text-light); }
+        .orientation-box .rot-deg { font-weight: bold; font-size: 16px; color: white; }
+
+        /* MAIN APP LAYOUT */
+        #app-container { display: none; position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #111; }
+        
+        .panel { display: flex; flex-direction: column; }
+        .panel-header { background: #333333; padding: 10px; font-weight: bold; color: var(--text-light); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        
+        /* LEFT PANEL: Tools & Properties */
+        .left-panel { position: absolute; top: 0; left: 0; width: 300px; height: 100%; z-index: 10; background: var(--bg-panel); border-right: 1px solid var(--border); box-shadow: 2px 0 15px rgba(0,0,0,0.6); backdrop-filter: blur(5px); display: flex; flex-direction: column; overflow: hidden; }
+        
+        .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; border-bottom: 1px solid var(--border); flex: 1 1 33%; overflow-y: auto; }
+        
+        /* Modified Tool Button Styles */
+        .tool-btn { position: relative; border-radius: 4px; background: var(--bg-input); font-size: 12px; padding: 8px 5px; text-align: center; border: 1px solid transparent; cursor: pointer; color: var(--text-light); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 55px;}
+        .tool-btn.active { border-color: var(--accent); background: #2a2d2e; }
+        .tool-btn:hover { border-bottom-left-radius: 0; border-bottom-right-radius: 0; z-index: 10; }
+        
+        .tool-icon { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; margin-bottom: 4px;}
+        
+        .tool-name { position: absolute; top: 100%; left: -1px; width: calc(100% + 2px); background: var(--accent-hover); color: white; font-size: 11px; font-weight: 500; max-height: 0; overflow: hidden; transition: max-height 0.2s ease, padding 0.2s ease; border-radius: 0 0 4px 4px; pointer-events: none; }
+        .tool-btn:hover .tool-name { max-height: 40px; padding: 5px 2px; box-shadow: 0 4px 8px rgba(0,0,0,0.5); border: 1px solid var(--accent-hover); border-top: none; }
+
+        #properties-panel { padding: 10px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); flex: 1 1 33%; max-height: none; overflow-y: auto;}
+        
+        .slider-group { display: flex; align-items: center; gap: 8px; }
+        .slider-group input[type="range"] { flex-grow: 1; cursor: pointer; }
+        .slider-group input[type="number"] { width: 60px; padding: 4px; text-align: right; }
+        .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .checkbox-group input { cursor: pointer; }
+        
+        #elements-list { padding: 10px; display: flex; flex-direction: column; gap: 5px; flex: 1 1 33%; overflow-y: auto; }
+        
+        .list-item-wrapper { position: relative; transition: all 0.1s; }
+        .element-capsule { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; cursor: pointer; color: white; transition: background 0.2s, border-color 0.2s, box-shadow 0.2s; background: var(--bg-input); user-select: none; }
+        .element-capsule:hover { border-color: #666; }
+        .element-capsule.active { background: var(--accent); border-color: var(--accent-hover); }
+        .element-capsule.group-header { background: #2b2b2c; border-style: dashed; }
+        .group-children { border-left: 2px solid var(--border); margin-left: 10px; padding-left: 5px; display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
+        
+        .action-icon { font-size: 14px; cursor: pointer; padding: 0 4px; opacity: 0.7; transition: opacity 0.2s; }
+        .action-icon:hover { opacity: 1; }
+        
+        .el-name-zone { background: rgba(255, 255, 255, 0.08); padding: 3px 8px; border-radius: 6px; flex-grow: 1; margin: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; transition: background 0.2s, box-shadow 0.2s; }
+        .el-name-zone:hover { background: rgba(255, 255, 255, 0.15); box-shadow: inset 0 0 0 1px var(--accent); }
+
+        /* DRAG PLACEHOLDERS & PREVIEWS */
+        .drag-placeholder { height: 0px; margin: 0; background: rgba(255,255,255,0.05); border: 2px dashed var(--accent); border-radius: 6px; transition: height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), margin 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; opacity: 0; }
+        .drag-placeholder.active { height: 32px; margin: 4px 0; opacity: 1; }
+        .group-hover-preview { background: rgba(0, 122, 204, 0.5) !important; border-color: #fff !important; box-shadow: 0 0 10px var(--accent); }
+        .dragging { opacity: 0.5; }
+
+        /* RIGHT PANEL: Code Generator & Pages */
+        .right-panel { position: absolute; top: 0; right: 0; width: 350px; height: 100%; z-index: 10; background: var(--bg-panel); border-left: 1px solid var(--border); box-shadow: -2px 0 15px rgba(0,0,0,0.6); backdrop-filter: blur(5px); transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); display: flex; flex-direction: column; }
+        .right-panel.closed { transform: translateX(100%); }
+        
+        #right-panel-toggle { position: absolute; top: 15px; left: -60px; width: 40px; height: 40px; border-radius: 50%; background: var(--bg-panel); border: 1px solid var(--border); display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); color: white; font-weight: bold; font-size: 18px; z-index: 11; }
+        .right-panel:not(.closed) #right-panel-toggle { top: 1px; left: 10px; border-radius: 15%; background: #00000000; border-color: transparent;}
+        
+        #right-panel-toggle span { display: inline-block; transition: transform 0.6s cubic-bezier(0.645, 0.045, 0.355, 1); }
+        .right-panel.closed #right-panel-toggle span { transform: rotate(0deg); } 
+        .right-panel:not(.closed) #right-panel-toggle span { transform: rotate(180deg); } 
+
+        /* PAGES CONTAINER */
+        #pages-wrapper { flex-shrink: 0; max-height: 250px; overflow-y: auto; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border-bottom: 1px solid var(--border); }
+        .page-thumb-container { background: var(--bg-input); border-radius: 8px; border: 2px solid transparent; padding: 8px; display: flex; flex-direction: column; align-items: center; cursor: pointer; position: relative; transition: border 0.2s; }
+        .page-thumb-container.active { border-color: var(--accent); }
+        .page-canvas-wrapper { width: 100%; aspect-ratio: 2/1; background: #000; border: 1px solid #222; border-radius: 4px; display: flex; justify-content: center; align-items: center; overflow: hidden; margin-bottom: 5px; }
+        .page-canvas-wrapper canvas { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+        .page-name-input { width: 100%; background: transparent; border: none; color: white; text-align: center; font-size: 11px; outline: none; }
+        
+        .page-add-btn { background: rgba(255,255,255,0.05); border: 2px dashed #666; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; color: #888; font-weight: bold; transition: all 0.2s; }
+        .page-add-btn:hover { background: rgba(255,255,255,0.1); color: white; border-color: #888; }
+        
+        .page-overlay { position: absolute; top:0; left:0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); border-radius: 8px; display: flex; justify-content: center; align-items: center; gap: 10px; opacity: 0; transition: opacity 0.2s; }
+        .page-thumb-container:hover .page-overlay { opacity: 1; }
+        .page-action-btn { background: #444; border:none; color: white; padding: 5px; border-radius: 4px; cursor:pointer; font-size: 12px; }
+        .page-action-btn:hover { background: var(--accent); }
+        .page-action-btn.delete:hover { background: #cc3333; }
+
+        .code-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 10px; background: transparent; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .code-actions button { margin: 0; font-size: 11px; padding: 6px; }
+        #code-output { flex-grow: 1; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; font-size: 12px; padding: 10px; border: none; resize: none; outline: none; white-space: pre; }
+
+        /* CENTER PANEL: Canvas & Zoom */
+        .center-panel { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; overflow: hidden; }
+        .zoom-controls { position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 5; background: var(--bg-panel); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; gap: 15px; padding: 10px 20px; }
+        .zoom-controls input[type="range"] { width: 150px; cursor: pointer; }
+        .zoom-controls span { font-weight: bold; font-size: 14px; min-width: 50px; text-align: right; }
+        
+        .canvas-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; }
+        #canvas-wrapper { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px solid var(--border); background: #252526; box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+        canvas { background: var(--canvas-bg); cursor: crosshair; image-rendering: pixelated; display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="warning-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 style="color: #ff5555; text-transform: uppercase; font-weight: 900; letter-spacing: 1px;">⚠️ Device Warning ⚠️</h2>
+            <p style="line-height: 1.6; font-size: 15px; margin-bottom: 20px;">
+                This project is <b>HEAVILY</b> focused for desktop use.<br><br>
+                Using it with a mobile device or touch screen will be <b>ABSOLUTELY ASS</b>.
+            </p>
+            <button onclick="document.getElementById('warning-modal').style.display='none'">I Understand</button>
+        </div>
+    </div>
+
+    <div id="setup-modal" class="modal-overlay" style="z-index: 1000;">
+        <div class="modal-content" id="setup-step-1">
+            <h2>Project Setup</h2>
+            <div class="form-group">
+                <label>Display Type</label>
+                <select id="setup-display" onchange="toggleCustomDims()">
+                    <option value="oled_128x64">OLED 128x64</option>
+                    <option value="oled_128x32">OLED 128x32</option>
+                    <option value="custom_oled">Custom OLED</option>
+                </select>
+            </div>
+            <div class="form-group custom-dims" id="custom-dims-container">
+                <input type="number" id="setup-w" placeholder="Width (px)" value="128">
+                <input type="number" id="setup-h" placeholder="Height (px)" value="64">
+            </div>
+
+            <div class="form-group">
+                <label>Library</label>
+                <select id="setup-library">
+                    <option value="adafruit">Adafruit Lib</option>
+                    <option value="u8g2">U8g2 Lib</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Communication</label>
+                <select id="setup-comm" onchange="updatePinsUI()">
+                    <option value="i2c">I2C</option>
+                    <option value="spi">SPI</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="pins-i2c">
+                <label>I2C Pins</label>
+                <div style="display:flex; gap:10px;">
+                    <div style="width: 48%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">SDA</label>
+                        <input type="text" id="pin-sda" placeholder="e.g. A4" value="A4">
+                    </div>
+                    <div style="width: 48%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">SCL</label>
+                        <input type="text" id="pin-scl" placeholder="e.g. A5" value="A5">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group" id="pins-spi" style="display:none;">
+                <label>SPI Pins</label>
+                <div style="display:flex; gap:5px; flex-wrap: wrap;">
+                    <div style="width: 48%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">MOSI</label>
+                        <input type="number" id="pin-mosi" value="11">
+                    </div>
+                    <div style="width: 48%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">CLK</label>
+                        <input type="number" id="pin-clk" value="13">
+                    </div>
+                    <div style="width: 31%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">CS</label>
+                        <input type="number" id="pin-cs" value="10">
+                    </div>
+                    <div style="width: 31%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">DC</label>
+                        <input type="number" id="pin-dc" value="9">
+                    </div>
+                    <div style="width: 31%;">
+                        <label style="font-size:11px; color:#aaa; margin-bottom:2px;">RST</label>
+                        <input type="number" id="pin-rst" value="8">
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="showStep2()">Next</button>
+        </div>
+
+        <div class="modal-content" id="setup-step-2" style="display: none;">
+            <h2>Screen Orientation</h2>
+            <div class="orientation-grid">
+                <div class="orientation-box active" onclick="setSetupRotation(0)">
+                    <img src="https://github.com/MateousLine/arduino_oled_designer/blob/main/icons/Oled.png?raw=true" style="transform: rotate(0deg); filter: invert(0);">
+                    <p class="rot-deg">0</p>
+                    <p>Horizontal</p>
+                </div>
+                <div class="orientation-box" onclick="setSetupRotation(1)">
+                    <img src="https://github.com/MateousLine/arduino_oled_designer/blob/main/icons/Oled.png?raw=true" style="transform: rotate(270deg); filter: invert(0);">
+                    <p class="rot-deg">90</p>
+                    <p>Portrait</p>
+                </div>
+                <div class="orientation-box" onclick="setSetupRotation(2)">
+                    <img src="https://github.com/MateousLine/arduino_oled_designer/blob/main/icons/Oled.png?raw=true" style="transform: rotate(180deg); filter: invert(0);">
+                    <p class="rot-deg">180</p>
+                    <p>Horizontal</p>
+                </div>
+                <div class="orientation-box" onclick="setSetupRotation(3)">
+                    <img src="https://github.com/MateousLine/arduino_oled_designer/blob/main/icons/Oled.png?raw=true" style="transform: rotate(90deg); filter: invert(0);">
+                    <p class="rot-deg">270</p>
+                    <p>Portrait</p>
+                </div>
+            </div>
+            
+            <button onclick="initProject()">Create Project</button>
+            <button onclick="showStep1()" style="background: transparent; border: 1px solid var(--border); margin-top: 10px; color: #aaa;">Back</button>
+        </div>
+    </div>
+
+    <div id="app-container">
+        
+        <div class="panel left-panel">
+            <div class="panel-header">Tools</div>
+            <div class="tools-grid" id="tools-grid">
+                <button class="tool-btn active" onclick="setTool('select')">
+                    <img src="icons/cursor.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/cursor.png?raw=true'" style="filter: invert(1)">
+                    <div class="tool-name">Select</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('move')">
+                    <img src="icons/move.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/move.png?raw=true'" style="filter: invert(1)">
+                    <div class="tool-name">Move (Pan)</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('brush')">
+                    <img src="https://cdn-icons-png.flaticon.com/512/103/103414.png" class="tool-icon" style="filter: invert(1)">
+                    <div class="tool-name">Brush (Draw)</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('eraser')">
+                    <img src="https://github.com/MateousLine/arduino_ui_designer/blob/main/icons/Eraser.png?raw=true" class="tool-icon">
+                    <div class="tool-name">Eraser Tool</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('bucket')">
+                    <img src="https://github.com/MateousLine/arduino_ui_designer/blob/main/icons/Bucket.png?raw=true" class="tool-icon" style="width: 32%; height: auto;">
+                    <div class="tool-name">Bucket Fill</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('text')">
+                    <img src="icons/text.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/text.png?raw=true'">
+                    <div class="tool-name">Add Text</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('dynamic_text')">
+                    <img src="icons/dynamictext.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/dynamictext.png?raw=true'">
+                    <div class="tool-name">Dynamic Text</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('scrolling_text')">
+                    <img src="icons/scrolling%20text.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/scrolling%20text.png?raw=true'" style="filter: invert(1)">
+                    <div class="tool-name">Scrolling Text</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('meter')">
+                    <img src="https://static.thenounproject.com/png/17970-200.png" class="tool-icon" style="filter: invert(1)">
+                    <div class="tool-name">Progress Meter</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('shape')">
+                    <img src="icons/shapes.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/shapes.png?raw=true'">
+                    <div class="tool-name">Insert Shape</div>
+                </button>
+                <button class="tool-btn" onclick="setTool('bitmap')">
+                    <img src="icons/insertimage.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/insertimage.png?raw=true'">
+                    <div class="tool-name">Insert Bitmap</div>
+                </button>
+                <button class="tool-btn" onclick="deleteSelected()">
+                    <img src="icons/delete.png" class="tool-icon" onerror="this.src='https://github.com/MateousLine/arduino_screen_builder/blob/main/icons/delete.png?raw=true'">
+                    <div class="tool-name">Delete Selected</div>
+                </button>
+            </div>
+            
+            <div class="panel-header">Properties</div>
+            <div id="properties-panel">
+                <div style="font-size:12px; color:#888;">Select an element or add a new one.</div>
+            </div>
+
+            <div class="panel-header">Layers & Elements</div>
+            <div id="elements-list"></div>
+        </div>
+
+        <div class="panel center-panel" id="center-panel">
+            <div class="zoom-controls">
+                <button class="element-capsule" onclick="undo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Undo (Ctrl+Z)">↺ Undo</button>
+                <button class="element-capsule" onclick="redo()" style="margin: 0; width: auto; padding: 6px 12px;" title="Redo (Ctrl+Y)">↻ Redo</button>
+                
+                <label style="margin-left: 10px;">Zoom:</label>
+                <input type="range" id="zoom-slider" min="1" max="15" value="4" oninput="setZoom(this.value)">
+                <input type="number" id="zoom-input" min="1" max="15" value="4" style="width: 50px;" onchange="setZoom(this.value)">
+                <span id="zoom-label">400%</span>
+            </div>
+            <div class="canvas-area">
+                <div id="canvas-wrapper">
+                    <canvas id="display-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right-panel" id="right-panel">
+            <div id="right-panel-toggle" onclick="toggleRightPanel()"><span>&lt;</span></div>
+            <div class="panel-header" style="justify-content: center; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Pages</div>
+            <div id="pages-wrapper"></div>
+            <div class="code-actions">
+                <button onclick="copyCode('all')">Copy All</button>
+                <button onclick="copyCode('init')">Copy Init</button>
+                <button onclick="copyCode('setup')">Copy Setup</button>
+                <button onclick="copyCode('loop')">Copy Loop</button>
+            </div>
+            <textarea id="code-output" readonly></textarea>
+        </div>
+
+    </div>
+
+    <script>
+        // --- SETUP MULTI-STEP LOGIC ---
+        let selectedOrientation = 0;
+
+        function showStep2() {
+            document.getElementById('setup-step-1').style.display = 'none';
+            document.getElementById('setup-step-2').style.display = 'block';
+        }
+
+        function showStep1() {
+            document.getElementById('setup-step-2').style.display = 'none';
+            document.getElementById('setup-step-1').style.display = 'block';
+        }
+
+        window.setSetupRotation = function(rot) {
+            selectedOrientation = rot;
+            const boxes = document.querySelectorAll('.orientation-box');
+            boxes.forEach((box, index) => {
+                if(index === rot) box.classList.add('active');
+                else box.classList.remove('active');
+            });
+        }
+
+        // --- Dynamic UI Pin Toggle ---
+        window.updatePinsUI = function() {
+            const comm = document.getElementById('setup-comm').value;
+            if(comm === 'i2c') {
+                document.getElementById('pins-i2c').style.display = 'block';
+                document.getElementById('pins-spi').style.display = 'none';
+            } else {
+                document.getElementById('pins-i2c').style.display = 'none';
+                document.getElementById('pins-spi').style.display = 'block';
+            }
+        };
+
+        // --- ADAFRUIT GFX STANDARD 5x7 FONT (ASCII 32-127) ---
+        const adafruit_font = new Uint8Array([
+            0x00,0x00,0x00,0x00,0x00, 0x00,0x00,0x5f,0x00,0x00, 0x00,0x07,0x00,0x07,0x00, 0x14,0x7f,0x14,0x7f,0x14,
+            0x24,0x2a,0x7f,0x2a,0x12, 0x23,0x13,0x08,0x64,0x62, 0x36,0x49,0x55,0x22,0x50, 0x00,0x05,0x03,0x00,0x00,
+            0x00,0x1c,0x22,0x41,0x00, 0x00,0x41,0x22,0x1c,0x00, 0x14,0x08,0x3e,0x08,0x14, 0x08,0x08,0x3e,0x08,0x08,
+            0x00,0x50,0x30,0x00,0x00, 0x08,0x08,0x08,0x08,0x08, 0x00,0x60,0x60,0x00,0x00, 0x20,0x10,0x08,0x04,0x02,
+            0x3e,0x51,0x49,0x45,0x3e, 0x00,0x42,0x7f,0x40,0x00, 0x42,0x61,0x51,0x49,0x46, 0x21,0x41,0x45,0x4b,0x31,
+            0x18,0x14,0x12,0x7f,0x10, 0x27,0x45,0x45,0x45,0x39, 0x3c,0x4a,0x49,0x49,0x30, 0x01,0x71,0x09,0x05,0x03,
+            0x36,0x49,0x49,0x49,0x36, 0x06,0x49,0x49,0x29,0x1e, 0x00,0x36,0x36,0x00,0x00, 0x00,0x56,0x36,0x00,0x00,
+            0x08,0x14,0x22,0x41,0x00, 0x14,0x14,0x14,0x14,0x14, 0x00,0x41,0x22,0x14,0x08, 0x02,0x01,0x51,0x09,0x06,
+            0x32,0x49,0x79,0x41,0x3e, 0x7e,0x11,0x11,0x11,0x7e, 0x7f,0x49,0x49,0x49,0x36, 0x3e,0x41,0x41,0x41,0x22,
+            0x7f,0x41,0x41,0x22,0x1c, 0x7f,0x49,0x49,0x49,0x41, 0x7f,0x09,0x09,0x09,0x01, 0x3e,0x41,0x49,0x49,0x7a,
+            0x7f,0x08,0x08,0x08,0x7f, 0x00,0x41,0x7f,0x41,0x00, 0x20,0x40,0x41,0x3f,0x01, 0x7f,0x08,0x14,0x22,0x41,
+            0x7f,0x40,0x40,0x40,0x40, 0x7f,0x02,0x0c,0x02,0x7f, 0x7f,0x04,0x08,0x10,0x7f, 0x3e,0x41,0x41,0x41,0x3e,
+            0x7f,0x09,0x09,0x09,0x06, 0x3e,0x41,0x51,0x21,0x5e, 0x7f,0x09,0x19,0x29,0x46, 0x46,0x49,0x49,0x49,0x31,
+            0x01,0x01,0x7f,0x01,0x01, 0x3f,0x40,0x40,0x40,0x3f, 0x1f,0x20,0x40,0x20,0x1f, 0x3f,0x40,0x38,0x40,0x3f,
+            0x63,0x14,0x08,0x14,0x63, 0x07,0x08,0x70,0x08,0x07, 0x61,0x51,0x49,0x45,0x43, 0x00,0x7f,0x41,0x41,0x00,
+            0x02,0x04,0x08,0x10,0x20, 0x00,0x41,0x41,0x7f,0x00, 0x04,0x02,0x01,0x02,0x04, 0x40,0x40,0x40,0x40,0x40,
+            0x00,0x01,0x02,0x04,0x00, 0x20,0x54,0x54,0x54,0x78, 0x7f,0x48,0x44,0x44,0x38, 0x38,0x44,0x44,0x44,0x20,
+            0x38,0x44,0x44,0x48,0x7f, 0x38,0x54,0x54,0x54,0x18, 0x08,0x7e,0x09,0x01,0x02, 0x0c,0x52,0x52,0x52,0x3e,
+            0x7f,0x08,0x04,0x04,0x78, 0x00,0x44,0x7d,0x40,0x00, 0x20,0x40,0x44,0x3d,0x00, 0x7f,0x10,0x28,0x44,0x00,
+            0x00,0x41,0x7f,0x40,0x00, 0x7c,0x04,0x18,0x04,0x78, 0x7c,0x08,0x04,0x04,0x78, 0x38,0x44,0x44,0x44,0x38,
+            0x7c,0x14,0x14,0x14,0x08, 0x08,0x14,0x14,0x18,0x7c, 0x7c,0x08,0x04,0x04,0x08, 0x48,0x54,0x54,0x54,0x20,
+            0x04,0x3f,0x44,0x40,0x20, 0x3c,0x40,0x40,0x20,0x7c, 0x1c,0x20,0x40,0x20,0x1c, 0x3c,0x40,0x30,0x40,0x3c,
+            0x44,0x28,0x10,0x28,0x44, 0x0c,0x50,0x50,0x50,0x3c, 0x44,0x64,0x54,0x4c,0x44, 0x00,0x08,0x36,0x41,0x00,
+            0x00,0x00,0x7f,0x00,0x00, 0x00,0x41,0x36,0x08,0x00, 0x10,0x08,0x08,0x10,0x08, 0x78,0x46,0x41,0x46,0x78
+        ]);
+
+        function drawGFXText(ctx, text, startX, startY, size, scale, color) {
+            ctx.fillStyle = color;
+            let cursorX = startX;
+            for (let i = 0; i < text.length; i++) {
+                let charCode = text.charCodeAt(i);
+                if (charCode < 32 || charCode > 127) charCode = 32;
+                let offset = (charCode - 32) * 5;
+                for (let col = 0; col < 5; col++) {
+                    let line = adafruit_font[offset + col];
+                    for (let row = 0; row < 8; row++) {
+                        if (line & (1 << row)) {
+                            ctx.fillRect(
+                                (cursorX + col * size) * scale,
+                                (startY + row * size) * scale,
+                                size * scale,
+                                size * scale
+                            );
+                        }
+                    }
+                }
+                cursorX += 6 * size; 
+            }
+        }
+
+        // --- STATE MANAGEMENT & HISTORY ---
+        const state = {
+            project: { width: 128, height: 64, type: 'oled_128x64', hardwareWidth: 128, hardwareHeight: 64, rotation: 0 },
+            scale: 4, 
+            panX: 0, 
+            panY: 0,
+            activeTool: 'select',
+            selectedElementId: null,
+            nextId: 1,
+            brushSize: 1,
+            hoverX: null,
+            hoverY: null,
+            pages: [],
+            currentPageIndex: 0
+        };
+
+        const historyStack = [];
+        let historyIndex = -1;
+
+        function getElements() { return state.pages[state.currentPageIndex].elements; }
+        function getBgPixels() { return state.pages[state.currentPageIndex].backgroundPixels; }
+
+        const canvas = document.getElementById('display-canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvas-wrapper');
+        const centerPanel = document.getElementById('center-panel');
+        
+        let isDrawing = false;
+        let isPanning = false;
+        let brushState = 1; 
+        let draggingElement = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let startPanMouseX = 0;
+        let startPanMouseY = 0;
+        let initialPanX = 0;
+        let initialPanY = 0;
+        let lastHoverX = null;
+        let lastHoverY = null;
+
+        function saveState() {
+            if (historyIndex < historyStack.length - 1) {
+                historyStack.splice(historyIndex + 1);
+            }
+            historyStack.push(JSON.stringify({
+                pages: state.pages,
+                currentPageIndex: state.currentPageIndex,
+                nextId: state.nextId
+            }));
+            historyIndex++;
+            renderPagesUI();
+        }
+
+        window.undo = function() {
+            if (historyIndex > 0) { historyIndex--; restoreState(); }
+        }
+
+        window.redo = function() {
+            if (historyIndex < historyStack.length - 1) { historyIndex++; restoreState(); }
+        }
+
+        function restoreState() {
+            const h = JSON.parse(historyStack[historyIndex]);
+            state.pages = h.pages;
+            state.currentPageIndex = h.currentPageIndex;
+            state.nextId = h.nextId;
+            state.selectedElementId = null;
+
+            renderElementsList();
+            renderProperties();
+            renderPagesUI();
+            renderCanvas();
+            generateCode();
+        }
+
+        // --- KEYBOARD SHORTCUTS ---
+        window.addEventListener('keydown', e => {
+            const isInputMode = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+            if (e.ctrlKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+            else if (e.ctrlKey && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+            else if ((e.key === 'Backspace' || e.key === 'Delete') && !isInputMode) {
+                if (state.selectedElementId) { e.preventDefault(); deleteSelected(); }
+            }
+        });
+
+        // --- TREE MANAGEMENT LOGIC ---
+        function getTree() {
+            let els = getElements();
+            let tree = [];
+            let map = {};
+            els.forEach(el => map[el.id] = { ...el, children: [] });
+            els.forEach(el => {
+                if (el.groupId && map[el.groupId]) map[el.groupId].children.push(map[el.id]);
+                else tree.push(map[el.id]);
+            });
+            return { tree, map };
+        }
+
+        function flattenTree(nodes, groupId = null) {
+            let flat = [];
+            nodes.forEach(node => {
+                let el = { ...node };
+                delete el.children;
+                el.groupId = groupId;
+                flat.push(el);
+                if (node.children && node.children.length > 0) {
+                    flat = flat.concat(flattenTree(node.children, node.id));
+                }
+            });
+            return flat;
+        }
+
+        function isElementHidden(el, allEls) {
+            if (el.isHidden) return true;
+            if (el.groupId) {
+                const parent = allEls.find(e => e.id === el.groupId);
+                if (parent) return isElementHidden(parent, allEls);
+            }
+            return false;
+        }
+
+        function getGroupBounds(groupId, map) {
+            let node = map[groupId];
+            if (!node || node.children.length === 0) return null;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            let hasVisible = false;
+            
+            function traverse(n) {
+                if (n.isHidden) return;
+                if (n.children && n.children.length > 0) {
+                    n.children.forEach(traverse);
+                } else if (n.type !== 'group') {
+                    let b = getBounds(n);
+                    if (b.x < minX) minX = b.x;
+                    if (b.y < minY) minY = b.y;
+                    if (b.x + b.w > maxX) maxX = b.x + b.w;
+                    if (b.y + b.h > maxY) maxY = b.y + b.h;
+                    hasVisible = true;
+                }
+            }
+            traverse(node);
+            return hasVisible ? {x: minX, y: minY, w: maxX-minX, h: maxY-minY} : null;
+        }
+
+        // --- PAGE MANAGEMENT ---
+        function addPage() {
+            const newPageId = `page_${state.pages.length}`;
+            state.pages.push({
+                id: newPageId,
+                name: newPageId,
+                elements: [],
+                backgroundPixels: Array.from({length: state.project.width}, () => new Array(state.project.height).fill(0))
+            });
+            state.currentPageIndex = state.pages.length - 1;
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function selectPage(index) {
+            state.currentPageIndex = index;
+            state.selectedElementId = null;
+            refreshUI();
+        }
+
+        function deletePage(index) {
+            if (state.pages.length <= 1) return;
+            state.pages.splice(index, 1);
+            if (state.currentPageIndex >= state.pages.length) {
+                state.currentPageIndex = state.pages.length - 1;
+            }
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function duplicatePage(index) {
+            const source = JSON.parse(JSON.stringify(state.pages[index]));
+            source.id = `page_${state.pages.length}`;
+            
+            let match = source.name.match(/^(.*_)(\d+)$/);
+            if (match) {
+                let num = parseInt(match[2], 10);
+                source.name = `${match[1]}${num + 1}`;
+            } else {
+                source.name = `${source.name}_1`;
+            }
+
+            source.elements.forEach(el => { el.id = state.nextId++; });
+            
+            state.pages.push(source);
+            state.currentPageIndex = state.pages.length - 1;
+            state.selectedElementId = null;
+            saveState();
+            refreshUI();
+        }
+
+        function renamePage(index, newName) {
+            state.pages[index].name = newName;
+            saveState();
+            generateCode();
+        }
+
+        function refreshUI() {
+            renderPagesUI();
+            renderElementsList();
+            renderProperties();
+            renderCanvas();
+            generateCode();
+        }
+
+        function parseTextOutput(rawText) {
+            if(!rawText) return '""';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t.substring(1, t.length - 1); 
+            if (t.startsWith('"') && t.endsWith('"')) return t; 
+            return `"${t}"`; 
+        }
+
+        function getDisplayText(rawText) {
+            if(!rawText) return '';
+            let t = rawText.trim();
+            if (t.startsWith('(') && t.endsWith(')')) return t; 
+            if (t.startsWith('"') && t.endsWith('"')) return t.substring(1, t.length - 1); 
+            return t;
+        }
+
+        // --- SETUP PHASE ---
+        function toggleCustomDims() {
+            const val = document.getElementById('setup-display').value;
+            document.getElementById('custom-dims-container').style.display = val.includes('custom') ? 'flex' : 'none';
+        }
+
+        function initProject() {
+            const type = document.getElementById('setup-display').value;
+            state.project.type = type;
+
+            let hwWidth = 128;
+            let hwHeight = 64;
+
+            if(type === 'oled_128x64') { hwWidth = 128; hwHeight = 64; }
+            else if(type === 'oled_128x32') { hwWidth = 128; hwHeight = 32; }
+            else {
+                hwWidth = parseInt(document.getElementById('setup-w').value) || 128;
+                hwHeight = parseInt(document.getElementById('setup-h').value) || 64;
+            }
+
+            // Store base hardware dimensions and applied rotation
+            state.project.hardwareWidth = hwWidth;
+            state.project.hardwareHeight = hwHeight;
+            state.project.rotation = selectedOrientation;
+
+            // Apply canvas rotation for logical sizing (Swap if 90 or 270 degrees)
+            if (selectedOrientation === 1 || selectedOrientation === 3) {
+                state.project.width = hwHeight;
+                state.project.height = hwWidth;
+            } else {
+                state.project.width = hwWidth;
+                state.project.height = hwHeight;
+            }
+
+            // Store configurations for library, comm, and pins
+            state.project.library = document.getElementById('setup-library').value;
+            state.project.comm = document.getElementById('setup-comm').value;
+            
+            if (state.project.comm === 'i2c') {
+                state.project.pins = {
+                    sda: document.getElementById('pin-sda').value || 'A4',
+                    scl: document.getElementById('pin-scl').value || 'A5'
+                };
+            } else {
+                state.project.pins = {
+                    mosi: document.getElementById('pin-mosi').value || '11',
+                    clk: document.getElementById('pin-clk').value || '13',
+                    cs: document.getElementById('pin-cs').value || '10',
+                    dc: document.getElementById('pin-dc').value || '9',
+                    rst: document.getElementById('pin-rst').value || '8'
+                };
+            }
+
+            state.pages = [{
+                id: 'page_0', name: 'page_0',
+                elements: [],
+                backgroundPixels: Array.from({length: state.project.width}, () => new Array(state.project.height).fill(0))
+            }];
+            state.currentPageIndex = 0;
+            
+            state.panX = 0; state.panY = 0;
+            updateCanvasPosition();
+            updateCanvasDimensions();
+            
+            document.getElementById('setup-modal').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+
+            saveState(); 
+            refreshUI();
+        }
+
+        function toggleRightPanel() {
+            document.getElementById('right-panel').classList.toggle('closed');
+        }
+
+        // --- ZOOM & PAN LOGIC ---
+        centerPanel.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY > 0 ? -1 : 1;
+            let oldScale = state.scale;
+            let newScale = state.scale + zoomAmount;
+            
+            if(newScale < 1) newScale = 1;
+            if(newScale > 15) newScale = 15;
+            
+            if(newScale !== oldScale) {
+                const wrapperRect = canvasWrapper.getBoundingClientRect();
+                let cx = e.clientX - (wrapperRect.left + wrapperRect.width/2);
+                let cy = e.clientY - (wrapperRect.top + wrapperRect.height/2);
+                
+                let dx = cx * (newScale / oldScale - 1);
+                let dy = cy * (newScale / oldScale - 1);
+                
+                state.panX -= dx;
+                state.panY -= dy;
+                
+                state.scale = newScale;
+                document.getElementById('zoom-slider').value = newScale;
+                document.getElementById('zoom-input').value = newScale;
+                
+                updateCanvasDimensions();
+                updateCanvasPosition();
+                renderCanvas();
+            }
+        }, {passive: false});
+
+        function setZoom(value) {
+            let z = parseInt(value);
+            if(isNaN(z) || z < 1) z = 1;
+            if(z > 15) z = 15;
+            state.scale = z;
+            document.getElementById('zoom-slider').value = z;
+            document.getElementById('zoom-input').value = z;
+            updateCanvasDimensions();
+            renderCanvas();
+        }
+
+        function updateCanvasDimensions() {
+            canvas.width = state.project.width * state.scale;
+            canvas.height = state.project.height * state.scale;
+            document.getElementById('zoom-label').innerText = `${state.scale * 100}%`;
+        }
+
+        function updateCanvasPosition() {
+            canvasWrapper.style.transform = `translate(calc(-50% + ${state.panX}px), calc(-50% + ${state.panY}px))`;
+        }
+
+        // --- TOOLS & ELEMENT CREATION ---
+        function setTool(tool) {
+            state.activeTool = tool;
+            const btns = document.querySelectorAll('.tool-btn');
+            btns.forEach(btn => btn.classList.remove('active'));
+            if(event && event.currentTarget) event.currentTarget.classList.add('active');
+            
+            if (tool === 'brush' || tool === 'eraser') {
+                state.selectedElementId = null;
+                renderProperties();
+                renderElementsList();
+                canvas.style.cursor = 'none';
+            } else if (tool === 'bucket') {
+                state.selectedElementId = null;
+                renderProperties();
+                renderElementsList();
+                canvas.style.cursor = 'crosshair';
+            } else {
+                canvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
+            }
+
+            if(tool !== 'select' && tool !== 'move' && tool !== 'brush' && tool !== 'eraser' && tool !== 'bucket' && tool !== 'delete') {
+                createElement(tool);
+                setTool('select'); 
+                btns[0].classList.add('active');
+            }
+        }
+
+        function getSelected() { return getElements().find(e => e.id === state.selectedElementId); }
+
+        function deleteSelected() {
+            if(state.selectedElementId) {
+                let idsToDelete = new Set([state.selectedElementId]);
+                let els = getElements();
+                
+                function markDescendants(parentId) {
+                    els.forEach(e => {
+                        if (e.groupId === parentId && !idsToDelete.has(e.id)) {
+                            idsToDelete.add(e.id);
+                            markDescendants(e.id);
+                        }
+                    });
+                }
+                markDescendants(state.selectedElementId);
+                
+                state.pages[state.currentPageIndex].elements = els.filter(e => !idsToDelete.has(e.id));
+                state.selectedElementId = null;
+                saveState();
+                refreshUI();
+            }
+        }
+
+        function createElement(type) {
+            const el = { 
+                id: state.nextId++, 
+                type: type, 
+                name: type.replace('_', ' ') + ' ' + state.nextId, 
+                isHidden: false, 
+                groupId: null, 
+                x: 10, 
+                y: 10, 
+                condition: '', 
+                alwaysVisible: true, 
+                visibilityMode: 'visible_when', 
+                anchored: false,
+                font: 'u8g2_font_5x7_tr' 
+            };
+            
+            if(type === 'text') { el.text = '"Hello World"'; el.size = 1; }
+            if(type === 'dynamic_text') { el.text = '(Val)'; el.size = 1; }
+            if(type === 'scrolling_text') { el.text = '"Scrolling Msg"'; el.size = 1; el.w = 50; el.h = 10; el.speed = 2; el.direction = 'left'; }
+            if(type === 'meter') { el.w = 50; el.h = 10; el.min = 0; el.max = 100; el.val = 50; el.target = 'val'; el.thickness = 1; el.isVertical = false; el.progressType = 'flat'; el.barCount = 10; el.barShape = 'rect'; el.loadingShape = 'flat'; el.minDegree = 0; el.maxDegree = 360; el.useArc = true; }
+            if(type === 'shape') { el.shapeType = 'rect'; el.w = 20; el.h = 20; el.fill = false; el.thickness = 1; }
+            if(type === 'bitmap') { el.w = 16; el.h = 16; el.hex = '0x00, 0x00'; }
+            
+            getElements().push(el);
+            state.selectedElementId = el.id;
+            
+            saveState();
+            refreshUI();
+        }
+
+        // --- BRUSH / BUCKET LOGIC ---
+        function getBrushPixels(cx, cy) {
+            let pixels = [];
+            for (let x = cx - Math.floor(state.brushSize); x <= cx + Math.floor(state.brushSize); x++) {
+                for (let y = cy - Math.floor(state.brushSize); y <= cy + Math.floor(state.brushSize); y++) {
+                    let offset = (state.brushSize % 2 === 0) ? 0.5 : 0;
+                    let dx = x - cx - offset;
+                    let dy = y - cy - offset;
+                    if (dx*dx + dy*dy <= (state.brushSize/2)*(state.brushSize/2) || state.brushSize === 1) {
+                        if (state.brushSize === 1 && (x !== cx || y !== cy)) continue; 
+                        pixels.push({x, y});
+                    }
+                }
+            }
+            return pixels;
+        }
+
+        function applyBrush(cx, cy) {
+            let pixels = getBrushPixels(cx, cy);
+            let bgs = getBgPixels();
+            pixels.forEach(p => {
+                if(p.x >= 0 && p.x < state.project.width && p.y >= 0 && p.y < state.project.height) {
+                    bgs[p.x][p.y] = brushState;
+                }
+            });
+            renderCanvas();
+        }
+
+        window.updateBrushSize = function(val) {
+            let size = parseInt(val);
+            if (isNaN(size) || size < 1) size = 1;
+            state.brushSize = size;
+            const s = document.getElementById('slider-brushSize');
+            const i = document.getElementById('input-brushSize');
+            if(s) s.value = size;
+            if(i) i.value = size;
+            renderCanvas(); 
+        }
+
+        function floodFill(startX, startY) {
+            let bgs = getBgPixels();
+            let target = bgs[startX][startY];
+            let replacement = target ? 0 : 1;
+            
+            if (target === replacement) return;
+            
+            let stack = [[startX, startY]];
+            bgs[startX][startY] = replacement;
+            
+            let w = state.project.width;
+            let h = state.project.height;
+            
+            while(stack.length > 0) {
+                let [x, y] = stack.pop();
+                
+                if (x + 1 < w && bgs[x + 1][y] === target) { bgs[x + 1][y] = replacement; stack.push([x + 1, y]); }
+                if (x - 1 >= 0 && bgs[x - 1][y] === target) { bgs[x - 1][y] = replacement; stack.push([x - 1, y]); }
+                if (y + 1 < h && bgs[x][y + 1] === target) { bgs[x][y + 1] = replacement; stack.push([x, y + 1]); }
+                if (y - 1 >= 0 && bgs[x][y - 1] === target) { bgs[x][y - 1] = replacement; stack.push([x, y - 1]); }
+            }
+            renderCanvas();
+            saveState();
+            generateCode();
+        }
+
+        // --- UI RENDERERS ---
+        function renderPagesUI() {
+            const wrapper = document.getElementById('pages-wrapper');
+            wrapper.innerHTML = '';
+            
+            state.pages.forEach((page, idx) => {
+                const isActive = idx === state.currentPageIndex ? 'active' : '';
+                
+                const thumbCanvas = document.createElement('canvas');
+                thumbCanvas.width = state.project.width;
+                thumbCanvas.height = state.project.height;
+                const tCtx = thumbCanvas.getContext('2d');
+                tCtx.fillStyle = '#000'; tCtx.fillRect(0,0, thumbCanvas.width, thumbCanvas.height);
+                tCtx.fillStyle = '#fff'; tCtx.strokeStyle = '#fff';
+                
+                for(let x=0; x<state.project.width; x++) {
+                    for(let y=0; y<state.project.height; y++) {
+                        if(page.backgroundPixels[x][y]) tCtx.fillRect(x,y,1,1);
+                    }
+                }
+                
+                page.elements.forEach(el => {
+                    if (el.type === 'group' || isElementHidden(el, page.elements)) return;
+                    if (el.type === 'text' || el.type === 'dynamic_text' || el.type === 'scrolling_text') {
+                        tCtx.fillRect(el.x, el.y, getDisplayText(el.text).length * 6 * el.size, 8 * el.size);
+                    } else if (el.shapeType === 'circle' || (el.type === 'meter' && (el.progressType === 'circle' || el.progressType === 'gauge' || el.progressType === 'loading'))) {
+                        tCtx.beginPath(); tCtx.arc(el.x, el.y, el.w, 0, Math.PI*2); el.fill ? tCtx.fill() : tCtx.stroke();
+                    } else {
+                        tCtx.strokeRect(el.x, el.y, el.w, el.h || el.w);
+                    }
+                });
+
+                const dataURL = thumbCanvas.toDataURL();
+
+                wrapper.innerHTML += `
+                    <div class="page-thumb-container ${isActive}" onclick="if(!event.target.classList.contains('page-name-input') && !event.target.classList.contains('page-action-btn')) selectPage(${idx})">
+                        <div class="page-canvas-wrapper">
+                            <img src="${dataURL}" style="width:100%; height:100%; image-rendering:pixelated;">
+                        </div>
+                        <input type="text" class="page-name-input" value="${page.name}" onchange="renamePage(${idx}, this.value)" onclick="this.select()">
+                        
+                        <div class="page-overlay">
+                            <button class="page-action-btn" onclick="duplicatePage(${idx}); event.stopPropagation();" title="Duplicate">Duplicate</button>
+                            <button class="page-action-btn delete" onclick="deletePage(${idx}); event.stopPropagation();" title="Delete">X</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            wrapper.innerHTML += `
+                <div class="page-add-btn" onclick="addPage()">
+                    <div style="font-size:24px; margin-bottom: 5px;">+</div>
+                    <div style="font-size:12px;">New Page</div>
+                </div>
+            `;
+        }
+
+        window.selectElement = function(id) {
+            state.selectedElementId = id;
+            renderElementsList();
+            renderProperties();
+            renderCanvas();
+        }
+
+        window.toggleVisibility = function(id, e) {
+            e.stopPropagation();
+            const el = getElements().find(e => e.id === id);
+            if (el) {
+                el.isHidden = !el.isHidden;
+                saveState();
+                renderElementsList();
+                renderCanvas();
+                renderPagesUI();
+            }
+        }
+
+        window.toggleGroupExpand = function(id, e) {
+            e.stopPropagation();
+            const el = getElements().find(e => e.id === id);
+            if (el && el.type === 'group') {
+                el.isExpanded = el.isExpanded === false ? true : false;
+                saveState();
+                renderElementsList();
+            }
+        }
+
+        window.editName = function(id, e) {
+            e.stopPropagation();
+            let zone = e.currentTarget;
+            if (zone.querySelector('input')) return; 
+            let el = getElements().find(e => e.id === id);
+            if (!el) return;
+            
+            let input = document.createElement('input');
+            input.type = 'text';
+            input.value = el.name || el.type;
+            input.style.width = '100%';
+            input.style.background = 'transparent';
+            input.style.color = 'white';
+            input.style.border = 'none';
+            input.style.outline = 'none';
+            input.style.fontSize = '12px';
+            
+            const finishEdit = () => {
+                if(el.name !== input.value && input.value.trim() !== '') {
+                    el.name = input.value.trim();
+                    saveState();
+                }
+                renderElementsList();
+            };
+            
+            input.onblur = finishEdit;
+            input.onkeydown = ev => { if(ev.key === 'Enter') finishEdit(); };
+            
+            zone.innerHTML = '';
+            zone.appendChild(input);
+            input.focus();
+            input.select();
+        }
+
+        // --- DRAG AND DROP LAYER / GROUPING LOGIC ---
+        let draggedNodeId = null;
+        let dragGroupTimer = null;
+        let dragTargetId = null;
+        let isGroupMode = false;
+        let currentDragState = { targetId: null, insertAfter: false };
+
+        window.handleDragStart = function(e, id) {
+            draggedNodeId = id;
+            e.dataTransfer.setData('text/plain', id);
+            e.stopPropagation();
+            let el = document.querySelector(`[data-wrapper-id="${id}"] > .element-capsule`);
+            if (el) el.classList.add('dragging');
+        }
+
+        window.handleDragOver = function(e, id) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (id === draggedNodeId) return;
+
+            let targetWrapper = document.querySelector(`[data-wrapper-id="${id}"]`);
+            if(!targetWrapper) return;
+            
+            let rect = targetWrapper.getBoundingClientRect();
+            let isUpperHalf = e.clientY < (rect.top + rect.height / 2);
+            
+            if (dragTargetId !== id) {
+                clearTimeout(dragGroupTimer);
+                dragTargetId = id;
+                isGroupMode = false;
+                
+                document.querySelectorAll('.group-hover-preview').forEach(el => el.classList.remove('group-hover-preview'));
+
+                dragGroupTimer = setTimeout(() => {
+                    isGroupMode = true;
+                    let el = targetWrapper.querySelector('.element-capsule');
+                    if(el) el.classList.add('group-hover-preview');
+                    
+                    let p = document.getElementById('drag-placeholder');
+                    if(p) p.classList.remove('active');
+                }, 1000);
+            }
+
+            if (!isGroupMode) {
+                let el = targetWrapper.querySelector('.element-capsule');
+                if(el) el.classList.remove('group-hover-preview');
+
+                let insertAfter = !isUpperHalf;
+                if (currentDragState.targetId !== id || currentDragState.insertAfter !== insertAfter) {
+                    currentDragState = { targetId: id, insertAfter: insertAfter };
+                    
+                    let p = document.getElementById('drag-placeholder');
+                    if (!p) {
+                        p = document.createElement('div');
+                        p.id = 'drag-placeholder';
+                        p.className = 'drag-placeholder';
+                    }
+                    
+                    if (insertAfter) {
+                        targetWrapper.parentNode.insertBefore(p, targetWrapper.nextSibling);
+                    } else {
+                        targetWrapper.parentNode.insertBefore(p, targetWrapper);
+                    }
+                    
+                    void p.offsetWidth;
+                    p.classList.add('active');
+                }
+            }
+        }
+
+        window.handleDragLeave = function(e, id) {
+        }
+
+        window.handleDragEnd = function(e) {
+            clearTimeout(dragGroupTimer);
+            document.querySelectorAll('.group-hover-preview').forEach(el => el.classList.remove('group-hover-preview'));
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            let p = document.getElementById('drag-placeholder');
+            if (p) p.remove();
+            currentDragState = { targetId: null, insertAfter: false };
+            draggedNodeId = null;
+        }
+
+        window.handleDrop = function(e, id) {
+            e.preventDefault(); 
+            e.stopPropagation();
+            clearTimeout(dragGroupTimer);
+            let p = document.getElementById('drag-placeholder');
+            if (p) p.remove();
+            document.querySelectorAll('.group-hover-preview').forEach(el => el.classList.remove('group-hover-preview'));
+
+            if (draggedNodeId === id || !draggedNodeId) return;
+
+            let { tree, map } = getTree();
+            let sourceNode = map[draggedNodeId];
+            let targetNode = map[id];
+
+            if (!sourceNode || !targetNode) return;
+
+            function removeNode(nodeId, currentTree) {
+                for (let i = 0; i < currentTree.length; i++) {
+                    if (currentTree[i].id === nodeId) return currentTree.splice(i, 1)[0];
+                    if (currentTree[i].children) {
+                        let found = removeNode(nodeId, currentTree[i].children);
+                        if (found) return found;
+                    }
+                }
+                return null;
+            }
+            
+            function isDescendant(parent, childId) {
+                if (!parent.children) return false;
+                if (parent.children.find(c => c.id === childId)) return true;
+                for (let c of parent.children) if (isDescendant(c, childId)) return true;
+                return false;
+            }
+            
+            if (isDescendant(sourceNode, id)) {
+                renderElementsList();
+                return;
+            }
+
+            removeNode(draggedNodeId, tree);
+            
+            function findParentArray(currTree, targetId) {
+                for(let i=0; i<currTree.length; i++) {
+                    if (currTree[i].id === targetId) return currTree;
+                    if (currTree[i].children) {
+                        let res = findParentArray(currTree[i].children, targetId);
+                        if (res) return res;
+                    }
+                }
+                return null;
+            }
+
+            let parentArray = findParentArray(tree, targetNode.id) || tree;
+            let targetIdx = parentArray.findIndex(n => n.id === targetNode.id);
+
+            if (isGroupMode) {
+                if (targetNode.type === 'group') {
+                    targetNode.children.push(sourceNode);
+                    targetNode.isExpanded = true;
+                } else {
+                    let newGroup = {
+                        id: state.nextId++, type: 'group', name: 'Group ' + state.nextId,
+                        isHidden: false, isExpanded: true, children: [targetNode, sourceNode]
+                    };
+                    parentArray[targetIdx] = newGroup;
+                }
+            } else {
+                let rect = e.currentTarget.getBoundingClientRect();
+                let isUpperHalf = e.clientY < (rect.top + rect.height / 2);
+                let insertAfterUI = currentDragState.targetId === id ? currentDragState.insertAfter : !isUpperHalf;
+
+                if (!insertAfterUI) { 
+                    parentArray.splice(targetIdx + 1, 0, sourceNode);
+                } else {           
+                    parentArray.splice(targetIdx, 0, sourceNode);
+                }
+            }
+
+            state.pages[state.currentPageIndex].elements = flattenTree(tree);
+            saveState();
+            refreshUI();
+        }
+
+        function renderElementsList() {
+            const list = document.getElementById('elements-list');
+            list.innerHTML = '';
+            const { tree } = getTree();
+            
+            if(tree.length === 0) {
+                list.innerHTML = '<div style="font-size:12px; color:#888; text-align:center;">No elements added yet</div>'; return;
+            }
+
+            function renderNodes(nodes) {
+                let html = '';
+                for (let i = nodes.length - 1; i >= 0; i--) {
+                    let node = nodes[i];
+                    let isActive = node.id === state.selectedElementId ? 'active' : '';
+                    let dispName = node.name || node.type;
+                    let eyeIcon = node.isHidden ? '&#128065;&#xFE0E;' : '&#128065;'; 
+                    let eyeStyle = node.isHidden ? 'opacity: 0.3;' : 'opacity: 0.8;';
+                    let bg = node.type === 'group' ? 'group-header' : '';
+                    let arrow = node.type === 'group' ? (node.isExpanded !== false ? '▼' : '▶') : '&nbsp;';
+
+                    html += `
+                    <div class="list-item-wrapper" data-wrapper-id="${node.id}" draggable="true" ondragstart="handleDragStart(event, ${node.id})" ondragover="handleDragOver(event, ${node.id})" ondragleave="handleDragLeave(event, ${node.id})" ondrop="handleDrop(event, ${node.id})" ondragend="handleDragEnd(event)">
+                        <div class="element-capsule ${isActive} ${bg}" onclick="selectElement(${node.id})">
+                            <span class="action-icon" style="${eyeStyle}" onclick="toggleVisibility(${node.id}, event)" title="Toggle Visibility">${eyeIcon}</span>
+                            <div class="el-name-zone" onclick="editName(${node.id}, event)" title="Click to rename">${dispName}</div>
+                            <span class="action-icon" onclick="toggleGroupExpand(${node.id}, event)" style="width: 15px; text-align:center;">${arrow}</span>
+                        </div>
+                    </div>`;
+
+                    if (node.children && node.children.length > 0 && node.isExpanded !== false) {
+                        html += `<div class="group-children">${renderNodes(node.children)}</div>`;
+                    }
+                }
+                return html;
+            }
+
+            list.innerHTML = renderNodes(tree);
+        }
+
+        function renderProperties() {
+            const panel = document.getElementById('properties-panel');
+            panel.innerHTML = '';
+            
+            if (state.activeTool === 'brush' || state.activeTool === 'eraser') {
+                panel.innerHTML = `
+                    <div class="form-group">
+                        <label>Brush/Eraser Size (Radius)</label>
+                        <div class="slider-group">
+                            <input type="range" id="slider-brushSize" min="1" max="15" value="${state.brushSize}" oninput="updateBrushSize(this.value)">
+                            <input type="number" id="input-brushSize" min="1" max="15" value="${state.brushSize}" onchange="updateBrushSize(this.value)">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#aaa; margin-top: 10px; line-height:1.4;">
+                        Use directly on the canvas.<br><br>${state.activeTool === 'brush' ? 'Click or drag to paint pixels.' : 'Click or drag to erase existing pixels.'}
+                    </div>
+                `;
+                return;
+            } else if (state.activeTool === 'bucket') {
+                panel.innerHTML = `
+                    <div style="font-size:11px; color:#aaa; margin-top: 10px; line-height:1.4; text-align:center;">
+                        <strong>Bucket Fill Tool</strong><br><br>
+                        Click directly on the canvas to fill an enclosed space or erase an entire filled shape.
+                    </div>
+                `;
+                return;
+            }
+
+            const el = getSelected();
+            if(!el) { panel.innerHTML = '<div style="font-size:12px; color:#888; text-align:center; ">Select an element to view properties</div>'; return; }
+            if(el.type === 'group') {
+                 panel.innerHTML = `
+                    <div style="font-size:11px; color:#aaa; margin-top: 10px; line-height:1.4; text-align:center;">
+                        <strong>Group Selected</strong><br><br>
+                        Toggle visibility or rename the group using the layer list. Delete will remove group and its children.<br><br>
+                        Drag inside the selection box on the canvas to move the group.
+                    </div>
+                `;
+                return;
+            }
+
+            const createInput = (label, key, type='text', placeholder='') => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <input type="${type}" id="prop-${key}" placeholder='${placeholder}' value='${el[key] !== undefined ? el[key] : ''}' onchange="updateElement(${el.id}, '${key}', this.value)">
+                </div>`;
+
+            const createSlider = (label, key, min, max) => `
+                <div class="form-group">
+                    <label>${label}</label>
+                    <div class="slider-group">
+                        <input type="range" id="slider-${key}" min="${min}" max="${max}" value="${el[key]}" oninput="syncSlider(${el.id}, '${key}', this.value)">
+                        <input type="number" id="input-${key}" value="${el[key]}" onchange="syncSlider(${el.id}, '${key}', this.value)">
+                    </div>
+                </div>`;
+
+            const createCheckbox = (label, key) => `
+                <label class="checkbox-group form-group">
+                    <input type="checkbox" ${el[key] ? 'checked' : ''} onchange="updateElement(${el.id}, '${key}', this.checked)">
+                    ${label}
+                </label>`;
+
+            let html = createSlider('X Position', 'x', -50, state.project.width + 50);
+            html += createSlider('Y Position', 'y', -50, state.project.height + 50);
+            html += createCheckbox('Anchor (Lock Position)', 'anchored');
+            html += createCheckbox('Always Visible', 'alwaysVisible');
+            
+            if(!el.alwaysVisible) {
+                html += `<div class="form-group" style="display:flex; gap: 5px; align-items:center;">
+                            <select id="prop-visibilityMode" style="width: 45%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" onchange="updateElement(${el.id}, 'visibilityMode', this.value)">
+                                <option value="visible_when" ${el.visibilityMode==='visible_when'?'selected':''}>Visible When</option>
+                                <option value="invisible_when" ${el.visibilityMode==='invisible_when'?'selected':''}>Invisible When</option>
+                            </select>
+                            <input type="text" id="prop-condition" style="width: 55%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-light); border-radius: 4px;" placeholder="e.g. var == 1" value="${el.condition !== undefined ? el.condition : ''}" onchange="updateElement(${el.id}, 'condition', this.value)">
+                         </div>`;
+            }
+
+            let textPlaceholder = 'e.g., "Hello world" or (sensorval)';
+            if (el.type === 'text') textPlaceholder = 'e.g., "Hello World" displayed as Hello World';
+            else if (el.type === 'dynamic_text') textPlaceholder = '(val) displayed as 1 if val == 1;';
+            else if (el.type === 'scrolling_text') textPlaceholder = 'e.g., "Hello World" or (sensorval)';
+
+            if(el.type === 'text' || el.type === 'dynamic_text') {
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+                
+                if (state.project.library === 'u8g2') {
+                    html += `<div class="form-group">
+                                <label>U8g2 Font</label>
+                                <select onchange="updateElement(${el.id}, 'font', this.value)">
+                                    <option value="u8g2_font_5x7_tr" ${el.font==='u8g2_font_5x7_tr'?'selected':''}>5x7 (Default Adafruit Look)</option>
+                                    <option value="u8g2_font_6x10_tr" ${el.font==='u8g2_font_6x10_tr'?'selected':''}>6x10</option>
+                                    <option value="u8g2_font_8x13_tr" ${el.font==='u8g2_font_8x13_tr'?'selected':''}>8x13</option>
+                                    <option value="u8g2_font_ncenB08_tr" ${el.font==='u8g2_font_ncenB08_tr'?'selected':''}>ncenB08</option>
+                                    <option value="u8g2_font_ncenB14_tr" ${el.font==='u8g2_font_ncenB14_tr'?'selected':''}>ncenB14</option>
+                                </select>
+                             </div>`;
+                }
+            } else if (el.type === 'scrolling_text') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90° (Swap Bounds)</button>`;
+                html += createInput('Display Text / Variable', 'text', 'text', textPlaceholder);
+                html += createSlider('Text Size', 'size', 1, 10);
+                
+                if (state.project.library === 'u8g2') {
+                    html += `<div class="form-group">
+                                <label>U8g2 Font</label>
+                                <select onchange="updateElement(${el.id}, 'font', this.value)">
+                                    <option value="u8g2_font_5x7_tr" ${el.font==='u8g2_font_5x7_tr'?'selected':''}>5x7 (Default Adafruit Look)</option>
+                                    <option value="u8g2_font_6x10_tr" ${el.font==='u8g2_font_6x10_tr'?'selected':''}>6x10</option>
+                                    <option value="u8g2_font_8x13_tr" ${el.font==='u8g2_font_8x13_tr'?'selected':''}>8x13</option>
+                                </select>
+                             </div>`;
+                }
+
+                html += createSlider('Box Width', 'w', 5, state.project.width);
+                html += createSlider('Box Height', 'h', 5, state.project.height);
+                html += createSlider('Scroll Speed', 'speed', 1, 10);
+                html += `<div class="form-group">
+                            <label>Scroll Direction</label>
+                            <select onchange="updateElement(${el.id}, 'direction', this.value)">
+                                <option value="left" ${el.direction==='left'?'selected':''}>Left ←</option>
+                                <option value="right" ${el.direction==='right'?'selected':''}>Right → </option>
+                                <option value="up" ${el.direction==='up'?'selected':''}>Up ↑</option>
+                                <option value="down" ${el.direction==='down'?'selected':''}>Down ↓</option>
+                            </select>
+                         </div>`;
+            } else if (el.type === 'bitmap') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                html += createSlider('Width', 'w', 1, state.project.width);
+                html += createSlider('Height', 'h', 1, state.project.height);
+                html += `<div class="form-group">
+                            <label>Bitmap HEX Data</label>
+                            <textarea style="width:100%; height:80px; background:var(--bg-input); color:white; border:1px solid var(--border); padding:5px; font-family:monospace;" onchange="updateElement(${el.id}, 'hex', this.value)">${el.hex}</textarea>
+                         </div>`;
+            } else if (el.type === 'meter') {
+                html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                
+                html += `<div class="form-group">
+                            <label>Progress Type</label>
+                            <select onchange="updateElement(${el.id}, 'progressType', this.value)">
+                                <option value="flat" ${el.progressType==='flat'?'selected':''}>Flat</option>
+                                <option value="bars" ${el.progressType==='bars'?'selected':''}>Bars</option>
+                                <option value="circle" ${el.progressType==='circle'?'selected':''}>Circle</option>
+                                <option value="gauge" ${el.progressType==='gauge'?'selected':''}>Gauge</option>
+                                <option value="loading" ${el.progressType==='loading'?'selected':''}>Loading</option>
+                            </select>
+                         </div>`;
+
+                if (el.progressType === 'bars') {
+                    html += createSlider('Bar Count', 'barCount', 2, 30);
+                    html += `<div class="form-group">
+                                <label>Bar Shape</label>
+                                <select onchange="updateElement(${el.id}, 'barShape', this.value)">
+                                    <option value="rect" ${el.barShape==='rect'?'selected':''}>Rectangle</option>
+                                    <option value="circle" ${el.barShape==='circle'?'selected':''}>Circle</option>
+                                </select>
+                             </div>`;
+                }
+
+                if (el.progressType === 'loading') {
+                    html += `<div class="form-group">
+                                <label>Loading Shape</label>
+                                <select onchange="updateElement(${el.id}, 'loadingShape', this.value)">
+                                    <option value="flat" ${el.loadingShape==='flat'?'selected':''}>Flat</option>
+                                    <option value="bars" ${el.loadingShape==='bars'?'selected':''}>Bars</option>
+                                    <option value="circle" ${el.loadingShape==='circle'?'selected':''}>Circle</option>
+                                </select>
+                             </div>`;
+                    html += createSlider('Radius', 'w', 5, state.project.width);
+                    if (el.loadingShape === 'bars' || el.loadingShape === 'circle') {
+                        html += createSlider('Item Count', 'barCount', 2, 30);
+                        html += createSlider(el.loadingShape === 'circle' ? 'Circle Radius' : 'Line Length', 'thickness', 1, 10);
+                    } else {
+                        html += createSlider('Thickness', 'thickness', 1, 10);
+                    }
+                    html += `<div class="prop-row" style="display:flex; gap: 5px;">${createInput('Min Deg', 'minDegree', 'number')} ${createInput('Max Deg', 'maxDegree', 'number')}</div>`;
+                } else if (el.progressType === 'gauge') {
+                    html += createCheckbox('Use Arc', 'useArc');
+                    html += createSlider('Radius', 'w', 5, state.project.width);
+                    html += `<div class="prop-row" style="display:flex; gap: 5px;">${createInput('Min Deg', 'minDegree', 'number')} ${createInput('Max Deg', 'maxDegree', 'number')}</div>`;
+                } else if (el.progressType === 'circle') {
+                    html += createSlider('Radius', 'w', 5, state.project.width);
+                    html += createSlider('Thickness', 'thickness', 1, 10);
+                } else if (el.progressType !== 'bars') {
+                    html += createSlider('Width', 'w', 5, state.project.width);
+                    html += createSlider('Height', 'h', 2, state.project.height);
+                    html += createSlider('Outline Thickness', 'thickness', 1, 10);
+                } else if (el.progressType === 'bars') {
+                    html += createSlider('Width', 'w', 5, state.project.width);
+                    html += createSlider('Height', 'h', 2, state.project.height);
+                }
+
+                html += `<div class="prop-row" style="display:flex; gap: 5px;">${createInput('Min', 'min', 'number')} ${createInput('Max', 'max', 'number')}</div>`;
+                html += createInput('Target Variable', 'target');
+                html += createInput('Default Val (Preview)', 'val', 'number');
+            } else if (el.type === 'shape') {
+                html += `<div class="form-group">
+                            <label>Shape Type</label>
+                            <select onchange="updateElement(${el.id}, 'shapeType', this.value)">
+                                <option value="rect" ${el.shapeType==='rect'?'selected':''}>Rectangle</option>
+                                <option value="circle" ${el.shapeType==='circle'?'selected':''}>Circle</option>
+                                <option value="line" ${el.shapeType==='line'?'selected':''}>Line</option>
+                            </select>
+                         </div>`;
+                if(el.shapeType !== 'circle') {
+                    html += `<button onclick="rotateElement(${el.id})" style="margin-bottom: 15px; background: var(--bg-input); border: 1px solid var(--border); color: white;">↻ Rotate 90°</button>`;
+                }
+                html += createSlider(el.shapeType==='circle'?'Radius':'Width (X2)', 'w', 1, state.project.width);
+                if(el.shapeType !== 'circle') html += createSlider('Height (Y2)', 'h', 1, state.project.height);
+                html += createCheckbox('Fill Shape', 'fill');
+                if(!el.fill && el.shapeType !== 'line') html += createSlider('Outline Thickness', 'thickness', 1, 10);
+            }
+
+            panel.innerHTML = html;
+        }
+
+        window.syncSlider = function(id, key, value) {
+            let val = parseInt(value) || 0;
+            const s = document.getElementById(`slider-${key}`);
+            const i = document.getElementById(`input-${key}`);
+            if(s) s.value = val;
+            if(i) i.value = val;
+            
+            const el = getElements().find(e => e.id === id);
+            if(el) {
+                el[key] = val;
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.updateElement = function(id, key, value) {
+            const el = getElements().find(e => e.id === id);
+            if(el) {
+                if(typeof el[key] === 'boolean') el[key] = value;
+                else if (['text', 'condition', 'visibilityMode', 'direction', 'target', 'shapeType', 'hex', 'progressType', 'barShape', 'loadingShape', 'font'].includes(key)) el[key] = value;
+                else el[key] = isNaN(value) || value===''? value : Number(value);
+                
+                saveState(); 
+
+                if(['fill', 'alwaysVisible', 'shapeType', 'direction', 'visibilityMode', 'progressType', 'barShape', 'loadingShape', 'useArc', 'font'].includes(key)) renderProperties(); 
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        window.rotateElement = function(id) {
+            const el = getElements().find(e => e.id === id);
+            if(el && el.w !== undefined && el.h !== undefined) {
+                if(el.type === 'meter') el.isVertical = !el.isVertical;
+                
+                if (el.type === 'scrolling_text') {
+                    if (el.direction === 'left') el.direction = 'up';
+                    else if (el.direction === 'right') el.direction = 'down';
+                    else if (el.direction === 'up') el.direction = 'left';
+                    else if (el.direction === 'down') el.direction = 'right';
+                }
+
+                if (el.type === 'bitmap') {
+                    let hexStr = el.hex.replace(/0x/g, '').replace(/,/g, '').replace(/\s/g, '');
+                    let bytes = [];
+                    for(let i=0; i<hexStr.length; i+=2) {
+                        let byteVal = parseInt(hexStr.substring(i, i+2), 16);
+                        if(!isNaN(byteVal)) bytes.push(byteVal);
+                    }
+                    
+                    let grid = [];
+                    let byteIdx = 0, bitIdx = 0;
+                    for (let py = 0; py < el.h; py++) {
+                        grid[py] = [];
+                        for (let px = 0; px < el.w; px++) {
+                            let bit = 0;
+                            if (byteIdx < bytes.length) bit = (bytes[byteIdx] >> (7 - bitIdx)) & 1;
+                            grid[py][px] = bit;
+                            bitIdx++;
+                            if (bitIdx === 8) { bitIdx = 0; byteIdx++; }
+                        }
+                        if (bitIdx !== 0) { bitIdx = 0; byteIdx++; }
+                    }
+                    
+                    let newW = el.h; let newH = el.w;
+                    let newGrid = [];
+                    for (let py = 0; py < newH; py++) {
+                        newGrid[py] = [];
+                        for (let px = 0; px < newW; px++) {
+                            newGrid[py][px] = grid[el.h - 1 - px][py];
+                        }
+                    }
+                    
+                    let newBytes = [];
+                    for (let py = 0; py < newH; py++) {
+                        let currentByte = 0; let currentBitIdx = 0;
+                        for (let px = 0; px < newW; px++) {
+                            if (newGrid[py][px]) currentByte |= (1 << (7 - currentBitIdx));
+                            currentBitIdx++;
+                            if (currentBitIdx === 8) { newBytes.push(currentByte); currentByte = 0; currentBitIdx = 0; }
+                        }
+                        if (currentBitIdx !== 0) newBytes.push(currentByte);
+                    }
+                    
+                    el.hex = newBytes.map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(', ');
+                }
+
+                let temp = el.w; el.w = el.h; el.h = temp;
+                saveState();
+                renderProperties();
+                renderCanvas();
+                generateCode();
+            }
+        }
+
+        // --- CANVAS INTERACTION, ZOOMING & DRAGGING ---
+        function getLogicalPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.floor((e.clientX - rect.left) / state.scale),
+                y: Math.floor((e.clientY - rect.top) / state.scale)
+            };
+        }
+
+        function getBounds(el) {
+            let w=20, h=20;
+            let isCircle = el.shapeType === 'circle' || (el.type === 'meter' && (el.progressType === 'circle' || el.progressType === 'gauge' || el.progressType === 'loading'));
+            if(el.type === 'text' || el.type === 'dynamic_text') { w = getDisplayText(el.text).length * el.size * 6; h = el.size * 8; }
+            if(el.type === 'meter' || el.type === 'shape' || el.type === 'bitmap' || el.type === 'scrolling_text') {
+                w = el.w; h = isCircle ? el.w * 2 : (el.h || el.w);
+            }
+            let bx = isCircle ? el.x - el.w : el.x;
+            let by = isCircle ? el.y - el.w : el.y;
+            return { x: bx, y: by, w: Math.abs(w), h: Math.abs(h) };
+        }
+
+        canvas.addEventListener('mousedown', e => {
+            if (state.activeTool === 'move') {
+                isPanning = true; startPanMouseX = e.clientX; startPanMouseY = e.clientY;
+                initialPanX = state.panX; initialPanY = state.panY;
+                canvas.style.cursor = 'grabbing'; return;
+            }
+
+            const pos = getLogicalPos(e);
+
+            if(state.activeTool === 'bucket') {
+                if(pos.x >=0 && pos.x < state.project.width && pos.y >=0 && pos.y < state.project.height) {
+                    floodFill(pos.x, pos.y);
+                }
+                return;
+            }
+
+            if(state.activeTool === 'select') {
+                let hit = null;
+                const els = getElements();
+                
+                let selectedEl = getSelected();
+                if (selectedEl && selectedEl.type === 'group') {
+                    let gb = getGroupBounds(selectedEl.id, getTree().map);
+                    if (gb && pos.x >= gb.x && pos.x <= gb.x + gb.w && pos.y >= gb.y && pos.y <= gb.y + gb.h) {
+                        hit = selectedEl;
+                    }
+                }
+
+                if (!hit) {
+                    for(let i = els.length - 1; i >= 0; i--) {
+                        if (els[i].type === 'group' || isElementHidden(els[i], els)) continue;
+                        const b = getBounds(els[i]);
+                        if (pos.x >= b.x - 2 && pos.x <= b.x + b.w + 2 && pos.y >= b.y - 2 && pos.y <= b.y + b.h + 2) {
+                            hit = els[i]; break;
+                        }
+                    }
+                }
+                
+                selectElement(hit ? hit.id : null);
+                
+                if (hit) {
+                    draggingElement = hit;
+                    if (hit.type === 'group') {
+                        dragOffsetX = pos.x; 
+                        dragOffsetY = pos.y;
+                    } else if (!hit.anchored) {
+                        dragOffsetX = pos.x - hit.x; 
+                        dragOffsetY = pos.y - hit.y;
+                    }
+                }
+            } else if(state.activeTool === 'brush' || state.activeTool === 'eraser') {
+                isDrawing = true;
+                if(pos.x >=0 && pos.x < state.project.width && pos.y >=0 && pos.y < state.project.height) {
+                    brushState = state.activeTool === 'brush' ? 1 : 0;
+                } else {
+                    brushState = state.activeTool === 'brush' ? 1 : 0;
+                }
+                applyBrush(pos.x, pos.y);
+            }
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (isPanning && state.activeTool === 'move') {
+                state.panX = initialPanX + (e.clientX - startPanMouseX);
+                state.panY = initialPanY + (e.clientY - startPanMouseY);
+                updateCanvasPosition(); return;
+            }
+
+            if(e.target !== canvas && !draggingElement && !isPanning && !isDrawing) {
+                if (state.hoverX !== null) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+                return; 
+            }
+
+            const pos = getLogicalPos(e);
+            state.hoverX = pos.x; state.hoverY = pos.y;
+            
+            if (draggingElement) {
+                if (draggingElement.type === 'group') {
+                    let dx = pos.x - dragOffsetX;
+                    let dy = pos.y - dragOffsetY;
+                    dragOffsetX = pos.x;
+                    dragOffsetY = pos.y;
+                    
+                    function moveGroupNodes(groupId) {
+                        let map = getTree().map;
+                        let node = map[groupId];
+                        if(!node) return;
+                        if(node.children) node.children.forEach(c => moveGroupNodes(c.id));
+                        if (node.type !== 'group' && !node.anchored) {
+                            let flatEl = getElements().find(e => e.id === node.id);
+                            if (flatEl) { flatEl.x += dx; flatEl.y += dy; }
+                        }
+                    }
+                    moveGroupNodes(draggingElement.id);
+                    renderCanvas();
+                } else if (!draggingElement.anchored) {
+                    draggingElement.x = pos.x - dragOffsetX; 
+                    draggingElement.y = pos.y - dragOffsetY;
+                    if (document.getElementById('slider-x')) {
+                        document.getElementById('slider-x').value = draggingElement.x;
+                        document.getElementById('input-x').value = draggingElement.x;
+                        document.getElementById('slider-y').value = draggingElement.y;
+                        document.getElementById('input-y').value = draggingElement.y;
+                    }
+                    renderCanvas();
+                }
+            } else if(isDrawing && (state.activeTool === 'brush' || state.activeTool === 'eraser')) {
+                applyBrush(pos.x, pos.y);
+            } else if (state.activeTool === 'brush' || state.activeTool === 'eraser') {
+                if (lastHoverX !== pos.x || lastHoverY !== pos.y) {
+                    lastHoverX = pos.x; lastHoverY = pos.y;
+                    renderCanvas();
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', () => { 
+            if(isPanning) { isPanning = false; if(state.activeTool === 'move') canvas.style.cursor = 'grab'; }
+            if(isDrawing) { isDrawing = false; saveState(); generateCode(); }
+            if(draggingElement) { draggingElement = null; saveState(); generateCode(); }
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            if (state.hoverX !== null && !draggingElement) { state.hoverX = null; state.hoverY = null; renderCanvas(); }
+        });
+
+        // --- RENDERING ENGINE ---
+        function drawAdafruitCircle(xc, yc, r, fill, thickness, scale) {
+            const drawPx = (px, py) => {
+                ctx.fillRect(px * scale, py * scale, scale, scale);
+            };
+
+            if (fill) {
+                for(let x = -r; x <= r; x++) {
+                    for(let y = -r; y <= r; y++) {
+                        if (x*x + y*y <= r*r) drawPx(xc + x, yc + y);
+                    }
+                }
+            } else {
+                for(let i=0; i<thickness; i++) {
+                    let currR = r - i;
+                    if(currR < 0) break;
+                    
+                    let f = 1 - currR;
+                    let ddF_x = 1;
+                    let ddF_y = -2 * currR;
+                    let x = 0;
+                    let y = currR;
+
+                    drawPx(xc, yc + currR);
+                    drawPx(xc, yc - currR);
+                    drawPx(xc + currR, yc);
+                    drawPx(xc - currR, yc);
+
+                    while (x < y) {
+                        if (f >= 0) {
+                            y--; ddF_y += 2; f += ddF_y;
+                        }
+                        x++; ddF_x += 2; f += ddF_x;
+
+                        drawPx(xc + x, yc + y);
+                        drawPx(xc - x, yc + y);
+                        drawPx(xc + x, yc - y);
+                        drawPx(xc - x, yc - y);
+                        drawPx(xc + y, yc + x);
+                        drawPx(xc - y, yc + x);
+                        drawPx(xc + y, yc - x);
+                        drawPx(xc - y, yc - x);
+                    }
+                }
+            }
+        }
+
+        function renderCanvas() {
+            ctx.imageSmoothingEnabled = false;
+
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--canvas-bg');
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.scale >= 3) {
+                ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid-line');
+                ctx.lineWidth = 1;
+                for(let x=0; x<=state.project.width; x++) { ctx.beginPath(); ctx.moveTo(x*state.scale, 0); ctx.lineTo(x*state.scale, canvas.height); ctx.stroke(); }
+                for(let y=0; y<=state.project.height; y++) { ctx.beginPath(); ctx.moveTo(0, y*state.scale); ctx.lineTo(canvas.width, y*state.scale); ctx.stroke(); }
+            }
+
+            const baseColor = '#ffffff'; 
+            ctx.fillStyle = baseColor;
+            
+            const bgs = getBgPixels();
+            for(let x=0; x<state.project.width; x++) {
+                for(let y=0; y<state.project.height; y++) {
+                    if(bgs[x][y]) ctx.fillRect(x*state.scale, y*state.scale, state.scale, state.scale);
+                }
+            }
+
+            if ((state.activeTool === 'brush' || state.activeTool === 'eraser') && state.hoverX !== null && state.hoverY !== null) {
+                ctx.fillStyle = state.activeTool === 'eraser' ? 'rgba(255, 50, 50, 0.6)' : 'rgba(128, 128, 128, 0.6)';
+                let pixels = getBrushPixels(state.hoverX, state.hoverY);
+                pixels.forEach(p => {
+                    ctx.fillRect(p.x * state.scale, p.y * state.scale, state.scale, state.scale);
+                });
+            }
+
+            const allEls = getElements();
+            
+            let selEl = getSelected();
+            if (selEl && selEl.type === 'group') {
+                let gb = getGroupBounds(selEl.id, getTree().map);
+                if (gb) {
+                    ctx.strokeStyle = '#ff3333';
+                    ctx.lineWidth = state.scale;
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeRect((gb.x - 2) * state.scale, (gb.y - 2) * state.scale, (gb.w + 4) * state.scale, (gb.h + 4) * state.scale);
+                    ctx.setLineDash([]);
+                }
+            }
+
+            allEls.forEach(el => {
+                if (el.type === 'group' || isElementHidden(el, allEls)) return;
+
+                const sx = el.x * state.scale; const sy = el.y * state.scale;
+                
+                let elColor = (el.id === state.selectedElementId) ? '#ff3333' : baseColor;
+                ctx.fillStyle = elColor; ctx.strokeStyle = elColor;
+                ctx.lineWidth = state.scale;
+                
+                if(el.type === 'text' || el.type === 'dynamic_text') {
+                    let dispText = getDisplayText(el.text);
+                    drawGFXText(ctx, dispText, el.x, el.y, el.size, state.scale, elColor);
+                
+                } else if(el.type === 'scrolling_text') {
+                    let dispText = getDisplayText(el.text);
+                    if(el.id === state.selectedElementId) {
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        ctx.setLineDash([]);
+                    }
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(sx, sy, el.w * state.scale, el.h * state.scale);
+                    ctx.clip();
+                    drawGFXText(ctx, dispText, el.x, el.y, el.size, state.scale, elColor);
+                    ctx.restore();
+
+                } else if(el.type === 'bitmap') {
+                    if(el.hex && el.hex.trim().length > 0) {
+                        let hexStr = el.hex.replace(/0x/g, '').replace(/,/g, '').replace(/\s/g, '');
+                        let bytes = [];
+                        for(let i=0; i<hexStr.length; i+=2) {
+                            let byteVal = parseInt(hexStr.substring(i, i+2), 16);
+                            if(!isNaN(byteVal)) bytes.push(byteVal);
+                        }
+                        
+                        let byteIdx = 0; let bitIdx = 0;
+                        for (let py = 0; py < el.h; py++) {
+                            for (let px = 0; px < el.w; px++) {
+                                if (byteIdx < bytes.length) {
+                                    let bit = (bytes[byteIdx] >> (7 - bitIdx)) & 1;
+                                    if (bit) ctx.fillRect((el.x + px) * state.scale, (el.y + py) * state.scale, state.scale, state.scale);
+                                }
+                                bitIdx++;
+                                if (bitIdx === 8) { bitIdx = 0; byteIdx++; }
+                            }
+                            if (bitIdx !== 0) { bitIdx = 0; byteIdx++; } 
+                        }
+                    }
+                    if(el.id === state.selectedElementId) {
+                        ctx.strokeRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                    }
+
+                } else if(el.type === 'meter') {
+                    let pct = (el.val - el.min) / (el.max - el.min);
+                    if (pct < 0) pct = 0; if (pct > 1) pct = 1;
+
+                    if (!el.progressType || el.progressType === 'flat') {
+                        let t = (el.thickness || 1) * state.scale;
+                        ctx.lineWidth = t;
+                        ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale) - t, (el.h * state.scale) - t);
+                        
+                        let inX = sx + t; let inY = sy + t;
+                        let inW = (el.w * state.scale) - t*2;
+                        let inH = (el.h * state.scale) - t*2;
+                        
+                        if(pct > 0) {
+                            if(el.isVertical) {
+                                let fillH = inH * pct;
+                                if(inW > 0 && fillH > 0) ctx.fillRect(inX, inY + inH - fillH, inW, fillH);
+                            } else {
+                                let fillW = inW * pct;
+                                if(fillW > 0 && inH > 0) ctx.fillRect(inX, inY, fillW, inH);
+                            }
+                        }
+                    } else if (el.progressType === 'bars') {
+                        let bc = el.barCount || 10;
+                        let activeBars = Math.round(pct * bc);
+                        let barW = (el.w * state.scale) / bc;
+                        let barH = el.h * state.scale;
+                        for (let i = 0; i < bc; i++) {
+                            let bx = sx + i * barW;
+                            let by = sy;
+                            let bWidth = barW - (1 * state.scale); 
+                            if (bWidth < state.scale) bWidth = state.scale;
+                            
+                            if (i < activeBars) {
+                                ctx.fillStyle = elColor;
+                                if (el.barShape === 'circle') {
+                                    ctx.beginPath();
+                                    ctx.arc(bx + bWidth/2, by + barH/2, Math.min(bWidth, barH)/2, 0, 2*Math.PI);
+                                    ctx.fill();
+                                } else {
+                                    ctx.fillRect(bx, by, bWidth, barH);
+                                }
+                            } else {
+                                ctx.strokeStyle = '#555555'; 
+                                ctx.lineWidth = state.scale;
+                                if (el.barShape === 'circle') {
+                                    ctx.beginPath();
+                                    ctx.arc(bx + bWidth/2, by + barH/2, Math.min(bWidth, barH)/2, 0, 2*Math.PI);
+                                    ctx.stroke();
+                                } else {
+                                    ctx.strokeRect(bx + state.scale/2, by + state.scale/2, bWidth - state.scale, barH - state.scale);
+                                }
+                                ctx.strokeStyle = elColor; 
+                            }
+                        }
+                    } else if (el.progressType === 'circle') {
+                        let r = el.w;
+                        let t = el.thickness || 1;
+                        drawAdafruitCircle(el.x, el.y, r, false, t, state.scale);
+                        if (pct > 0) {
+                            let innerR = Math.max(0, (r - t) * pct);
+                            if (innerR > 0) {
+                                drawAdafruitCircle(el.x, el.y, Math.floor(innerR), true, 1, state.scale);
+                            }
+                        }
+                    } else if (el.progressType === 'gauge') {
+                        let r = el.w;
+                        let minDeg = el.minDegree !== undefined ? el.minDegree : 135;
+                        let maxDeg = el.maxDegree !== undefined ? el.maxDegree : 405;
+                        
+                        if (el.useArc !== false) {
+                            ctx.beginPath();
+                            ctx.arc(sx, sy, r * state.scale, (minDeg - 90) * Math.PI / 180, (maxDeg - 90) * Math.PI / 180);
+                            ctx.strokeStyle = elColor; 
+                            ctx.lineWidth = state.scale;
+                            ctx.stroke();
+                        }
+
+                        // Center Dot
+                        ctx.fillStyle = elColor;
+                        ctx.fillRect(sx - state.scale, sy - state.scale, state.scale*2, state.scale*2);
+
+                        // Progress Needle
+                        let currentDeg = minDeg + (maxDeg - minDeg) * pct;
+                        let rad = (currentDeg - 90) * Math.PI / 180;
+                        let nx = sx + (r * state.scale) * Math.cos(rad);
+                        let ny = sy + (r * state.scale) * Math.sin(rad);
+                        ctx.beginPath();
+                        ctx.moveTo(sx, sy);
+                        ctx.lineTo(nx, ny);
+                        ctx.strokeStyle = elColor;
+                        ctx.lineWidth = state.scale;
+                        ctx.stroke();
+                        
+                    } else if (el.progressType === 'loading') {
+                        let r = el.w;
+                        let minDeg = el.minDegree !== undefined ? el.minDegree : 0;
+                        let maxDeg = el.maxDegree !== undefined ? el.maxDegree : 360;
+                        let currentDeg = minDeg + (maxDeg - minDeg) * pct;
+                        let shape = el.loadingShape || 'flat';
+                        
+                        if (shape === 'flat') {
+                            let t = el.thickness || 2;
+                            ctx.beginPath();
+                            ctx.arc(sx, sy, r * state.scale, (minDeg - 90) * Math.PI / 180, (currentDeg - 90) * Math.PI / 180);
+                            ctx.strokeStyle = elColor;
+                            ctx.lineWidth = t * state.scale;
+                            ctx.stroke();
+                        } else if (shape === 'bars') {
+                            let bc = el.barCount || 10;
+                            let activeBars = Math.round(pct * bc);
+                            let t = el.thickness || 4;
+                            ctx.lineWidth = state.scale;
+                            for (let i = 0; i < bc; i++) {
+                                let angle = minDeg + i * (maxDeg - minDeg) / (bc > 1 ? bc - 1 : 1);
+                                let rad = (angle - 90) * Math.PI / 180;
+                                let x0 = sx + (r - t) * state.scale * Math.cos(rad);
+                                let y0 = sy + (r - t) * state.scale * Math.sin(rad);
+                                let x1 = sx + r * state.scale * Math.cos(rad);
+                                let y1 = sy + r * state.scale * Math.sin(rad);
+                                ctx.beginPath();
+                                ctx.moveTo(x0, y0);
+                                ctx.lineTo(x1, y1);
+                                ctx.strokeStyle = i < activeBars ? elColor : '#555555';
+                                ctx.stroke();
+                            }
+                        } else if (shape === 'circle') {
+                            let bc = el.barCount || 10;
+                            let activeBars = Math.round(pct * bc);
+                            let t = el.thickness || 2;
+                            ctx.lineWidth = state.scale;
+                            for (let i = 0; i < bc; i++) {
+                                let angle = minDeg + i * (maxDeg - minDeg) / (bc > 1 ? bc - 1 : 1);
+                                let rad = (angle - 90) * Math.PI / 180;
+                                let cx = sx + r * state.scale * Math.cos(rad);
+                                let cy = sy + r * state.scale * Math.sin(rad);
+                                ctx.beginPath();
+                                ctx.arc(cx, cy, t * state.scale, 0, 2*Math.PI);
+                                if (i < activeBars) {
+                                    ctx.fillStyle = elColor;
+                                    ctx.fill();
+                                } else {
+                                    ctx.strokeStyle = '#555555';
+                                    ctx.stroke();
+                                }
+                            }
+                        }
+                    }
+
+                } else if(el.type === 'shape') {
+                    let t = (el.thickness || 1) * state.scale;
+                    ctx.lineWidth = t;
+                    if(el.shapeType === 'rect') {
+                        if(el.fill) ctx.fillRect(sx, sy, el.w * state.scale, el.h * state.scale);
+                        else ctx.strokeRect(sx + t/2, sy + t/2, (el.w * state.scale)-t, (el.h * state.scale)-t);
+                    }
+                    if(el.shapeType === 'circle') {
+                        drawAdafruitCircle(el.x, el.y, el.w, el.fill, el.thickness || 1, state.scale);
+                    }
+                    if(el.shapeType === 'line') { 
+                        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo((el.x + el.w)*state.scale, (el.y + el.h)*state.scale); ctx.stroke(); 
+                    }
+                }
+            });
+            
+            renderPagesUI();
+        }
+
+        // --- CODE GENERATION ENGINE ---
+        const codeOutput = document.getElementById('code-output');
+        let codeBlocks = { init: '', setup: '', loop: '' };
+
+        function generateCode() {
+            let init = `// Auto-generated UI by Arduino Display UI Designer\n\n`;
+            
+            // Apply Library and Communication setup
+            if (state.project.library === 'u8g2') {
+                init += `#include <U8g2lib.h>\n`;
+                if (state.project.comm === 'i2c') {
+                    init += `#include <Wire.h>\n`;
+                    init += `U8G2_SSD1306_${state.project.hardwareWidth}X${state.project.hardwareHeight}_NONAME_F_HW_I2C u8g2(U8G2_R${state.project.rotation}, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ ${state.project.pins.scl}, /* data=*/ ${state.project.pins.sda});\n\n`;
+                } else {
+                    init += `#include <SPI.h>\n`;
+                    init += `U8G2_SSD1306_${state.project.hardwareWidth}X${state.project.hardwareHeight}_NONAME_F_4W_HW_SPI u8g2(U8G2_R${state.project.rotation}, /* cs=*/ ${state.project.pins.cs}, /* dc=*/ ${state.project.pins.dc}, /* reset=*/ ${state.project.pins.rst});\n\n`;
+                }
+            } else {
+                init += `#include <SPI.h>\n#include <Wire.h>\n#include <Adafruit_GFX.h>\n#include <Adafruit_SSD1306.h>\n\n`;
+                // ALWAYS USE HARDWARE WIDTH/HEIGHT FOR MACROS to prevent library distortion
+                init += `#define SCREEN_WIDTH ${state.project.hardwareWidth}\n#define SCREEN_HEIGHT ${state.project.hardwareHeight}\n`;
+                if (state.project.comm === 'i2c') {
+                    init += `#define OLED_RESET -1\n`;
+                    init += `Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);\n\n`;
+                } else {
+                    init += `#define OLED_MOSI ${state.project.pins.mosi}\n`;
+                    init += `#define OLED_CLK ${state.project.pins.clk}\n`;
+                    init += `#define OLED_DC ${state.project.pins.dc}\n`;
+                    init += `#define OLED_CS ${state.project.pins.cs}\n`;
+                    init += `#define OLED_RESET ${state.project.pins.rst}\n`;
+                    init += `Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);\n\n`;
+                }
+            }
+            init += `String pageid = "${state.pages[0].name}"; // Active Page tracking\n`;
+
+            state.pages.forEach((page, pageIndex) => {
+                page.elements.filter(e => e.type === 'bitmap').forEach(img => {
+                    init += `\nconst unsigned char bitmap_page${pageIndex}_img_${img.id} [] PROGMEM = {\n  ${img.hex}\n};\n`;
+                });
+
+                let hasBg = page.backgroundPixels.some(col => col.some(px => px === 1));
+                if(hasBg) {
+                    let bgHex = [];
+                    for(let y=0; y<state.project.height; y++) {
+                        let byte = 0; let bit = 0;
+                        for(let x=0; x<state.project.width; x++) {
+                            if(page.backgroundPixels[x][y]) byte |= (1 << (7 - bit));
+                            bit++;
+                            if(bit === 8) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                        }
+                        if(bit !== 0) { bgHex.push("0x"+byte.toString(16).padStart(2,'0')); byte = 0; bit = 0; }
+                    }
+                    init += `\nconst unsigned char bitmap_page${pageIndex}_bg [] PROGMEM = {\n  ${bgHex.join(', ')}\n};\n`;
+                }
+            });
+
+            // Setup Phase Generation
+            let setup = `void setup() {\n  Serial.begin(115200);\n\n`;
+            if (state.project.library === 'u8g2') {
+                setup += `  u8g2.begin();\n  u8g2.clearBuffer();\n  u8g2.setDrawColor(1);\n}\n`;
+            } else {
+                if (state.project.comm === 'i2c' && (state.project.pins.sda !== 'A4' || state.project.pins.scl !== 'A5')) {
+                    setup += `  Wire.begin(${state.project.pins.sda}, ${state.project.pins.scl});\n`;
+                }
+                if (state.project.comm === 'i2c') {
+                    setup += `  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {\n`;
+                } else {
+                    setup += `  if(!display.begin(SSD1306_SWITCHCAPVCC)) {\n`;
+                }
+                setup += `    Serial.println(F("SSD1306 allocation failed"));\n    for(;;);\n  }\n`;
+                setup += `  display.clearDisplay();\n`;
+                
+                // INJECT ADAFRUIT ROTATION IF NEEDED
+                if (state.project.rotation !== 0) {
+                    setup += `  display.setRotation(${state.project.rotation});\n`;
+                }
+
+                setup += `  display.setTextColor(SSD1306_WHITE);\n  display.setTextWrap(false);\n}\n`;
+            }
+
+            // Loop Phase Generation
+            let loop = `void loop() {\n  display.clearDisplay();\n\n`;
+
+            state.pages.forEach((page, pageIndex) => {
+                let pageBlock = `  if (pageid == "${page.name}") {\n`;
+                
+                let hasBg = page.backgroundPixels.some(col => col.some(px => px === 1));
+                if(hasBg) pageBlock += `    display.drawBitmap(0, 0, bitmap_page${pageIndex}_bg, ${state.project.width}, ${state.project.height}, SSD1306_WHITE);\n\n`;
+
+                page.elements.forEach((el) => {
+                    if (el.type === 'group') return;
+                    let block = ``;
+                    
+                    if(el.type === 'text' || el.type === 'dynamic_text') {
+                        let val = parseTextOutput(el.text);
+                        block += `    // U8G2_FONT: ${el.font || 'u8g2_font_5x7_tr'}\n`;
+                        block += `    display.setTextSize(${el.size});\n    display.setCursor(${el.x}, ${el.y});\n    display.print(${val});\n`;
+                    }
+
+                    if(el.type === 'scrolling_text') {
+                        let val = parseTextOutput(el.text);
+                        block += `    static int16_t offset_${pageIndex}_${el.id} = 0;\n`;
+                        block += `    display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_BLACK);\n`;
+                        block += `    // U8G2_FONT: ${el.font || 'u8g2_font_5x7_tr'}\n`;
+                        block += `    display.setTextSize(${el.size});\n`;
+                        
+                        if (el.direction === 'left' || el.direction === 'right') {
+                            block += `    int16_t cx_${pageIndex}_${el.id} = ${el.x} + offset_${pageIndex}_${el.id};\n`;
+                            block += `    int16_t cy_${pageIndex}_${el.id} = ${el.y};\n`;
+                            block += `    String text_${pageIndex}_${el.id} = String(${val});\n`;
+                            block += `    for(uint16_t i=0; i<text_${pageIndex}_${el.id}.length(); i++) {\n`;
+                            block += `      if(cx_${pageIndex}_${el.id} >= ${el.x} && cx_${pageIndex}_${el.id} + (6*${el.size}) <= ${el.x} + ${el.w}) {\n`;
+                            block += `        display.setCursor(cx_${pageIndex}_${el.id}, cy_${pageIndex}_${el.id});\n`;
+                            block += `        display.print(text_${pageIndex}_${el.id}[i]);\n`;
+                            block += `      }\n`;
+                            block += `      cx_${pageIndex}_${el.id} += 6 * ${el.size};\n`;
+                            block += `    }\n`;
+                            
+                            if (el.direction === 'left') {
+                                block += `    offset_${pageIndex}_${el.id} -= ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} < -(int16_t)(text_${pageIndex}_${el.id}.length() * 6 * ${el.size})) offset_${pageIndex}_${el.id} = ${el.w};\n`;
+                            } else {
+                                block += `    offset_${pageIndex}_${el.id} += ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} > ${el.w}) offset_${pageIndex}_${el.id} = -(int16_t)(text_${pageIndex}_${el.id}.length() * 6 * ${el.size});\n`;
+                            }
+                        } else {
+                            block += `    int16_t cx_${pageIndex}_${el.id} = ${el.x};\n`;
+                            block += `    int16_t cy_${pageIndex}_${el.id} = ${el.y} + offset_${pageIndex}_${el.id};\n`;
+                            block += `    String text_${pageIndex}_${el.id} = String(${val});\n`;
+                            block += `    if(cy_${pageIndex}_${el.id} >= ${el.y} && cy_${pageIndex}_${el.id} + (8*${el.size}) <= ${el.y} + ${el.h}) {\n`;
+                            block += `      display.setCursor(cx_${pageIndex}_${el.id}, cy_${pageIndex}_${el.id});\n`;
+                            block += `      display.print(text_${pageIndex}_${el.id});\n`;
+                            block += `    }\n`;
+                            
+                            if (el.direction === 'up') {
+                                block += `    offset_${pageIndex}_${el.id} -= ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} < -(8*${el.size})) offset_${pageIndex}_${el.id} = ${el.h};\n`;
+                            } else {
+                                block += `    offset_${pageIndex}_${el.id} += ${el.speed};\n`;
+                                block += `    if(offset_${pageIndex}_${el.id} > ${el.h}) offset_${pageIndex}_${el.id} = -(8*${el.size});\n`;
+                            }
+                        }
+                    }
+                    
+                    if(el.type === 'meter') {
+                        if (!el.progressType || el.progressType === 'flat') {
+                            let t = el.thickness || 1;
+                            if (t > 1) {
+                                block += `    for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                            } else {
+                                block += `    display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                            }
+                            if (el.isVertical) {
+                                block += `    display.fillRect(${el.x}+${t}, ${el.y}+${el.h}-${t} - map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), ${el.w}-${t*2}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.h}-${t*2}), SSD1306_WHITE);\n`;
+                            } else {
+                                block += `    display.fillRect(${el.x}+${t}, ${el.y}+${t}, map(${el.target}, ${el.min}, ${el.max}, 0, ${el.w}-${t*2}), ${el.h}-${t*2}, SSD1306_WHITE);\n`;
+                            }
+                        } else if (el.progressType === 'bars') {
+                            let bc = el.barCount || 10;
+                            block += `    int activeBars_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, 0, ${bc});\n`;
+                            block += `    for(int i=0; i<${bc}; i++) {\n`;
+                            block += `      int bx = ${el.x} + i * (${el.w} / ${bc});\n`;
+                            block += `      int bWidth = (${el.w} / ${bc}) - 1;\n`;
+                            block += `      if (bWidth < 1) bWidth = 1;\n`;
+                            if (el.barShape === 'circle') {
+                                block += `      int r = min(bWidth, (int)${el.h}) / 2;\n`;
+                                block += `      if (i < activeBars_${pageIndex}_${el.id}) display.fillCircle(bx + r, ${el.y} + r, r, SSD1306_WHITE);\n`;
+                                block += `      else display.drawCircle(bx + r, ${el.y} + r, r, SSD1306_WHITE);\n`;
+                            } else {
+                                block += `      if (i < activeBars_${pageIndex}_${el.id}) display.fillRect(bx, ${el.y}, bWidth, ${el.h}, SSD1306_WHITE);\n`;
+                                block += `      else display.drawRect(bx, ${el.y}, bWidth, ${el.h}, SSD1306_WHITE);\n`;
+                            }
+                            block += `    }\n`;
+                        } else if (el.progressType === 'circle') {
+                            let t = el.thickness || 1;
+                            if (t > 1) {
+                                block += `    for(int16_t i=0; i<${t}; i++) { display.drawCircle(${el.x}, ${el.y}, ${el.w}-i, SSD1306_WHITE); }\n`;
+                            } else {
+                                block += `    display.drawCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                            }
+                            block += `    int innerR_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, 0, ${el.w} - ${t});\n`;
+                            block += `    if (innerR_${pageIndex}_${el.id} > 0) display.fillCircle(${el.x}, ${el.y}, innerR_${pageIndex}_${el.id}, SSD1306_WHITE);\n`;
+                        } else if (el.progressType === 'gauge') {
+                            let minDeg = el.minDegree !== undefined ? el.minDegree : 135;
+                            let maxDeg = el.maxDegree !== undefined ? el.maxDegree : 405;
+                            
+                            if (el.useArc !== false) {
+                                block += `    for(int a=${minDeg}; a<=${maxDeg}; a+=2) {\n`;
+                                block += `      float rad = (a - 90) * 3.14159 / 180.0;\n`;
+                                block += `      display.drawPixel(${el.x} + ${el.w}*cos(rad), ${el.y} + ${el.w}*sin(rad), SSD1306_WHITE);\n`;
+                                block += `    }\n`;
+                            }
+
+                            block += `    int currentDeg_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, ${minDeg}, ${maxDeg});\n`;
+                            block += `    float rad_${pageIndex}_${el.id} = (currentDeg_${pageIndex}_${el.id} - 90) * 3.14159 / 180.0;\n`;
+                            block += `    int nx_${pageIndex}_${el.id} = ${el.x} + ${el.w} * cos(rad_${pageIndex}_${el.id});\n`;
+                            block += `    int ny_${pageIndex}_${el.id} = ${el.y} + ${el.w} * sin(rad_${pageIndex}_${el.id});\n`;
+                            block += `    display.drawCircle(${el.x}, ${el.y}, 2, SSD1306_WHITE);\n`;
+                            block += `    display.drawLine(${el.x}, ${el.y}, nx_${pageIndex}_${el.id}, ny_${pageIndex}_${el.id}, SSD1306_WHITE);\n`;
+                        } else if (el.progressType === 'loading') {
+                            let minDeg = el.minDegree !== undefined ? el.minDegree : 0;
+                            let maxDeg = el.maxDegree !== undefined ? el.maxDegree : 360;
+                            let shape = el.loadingShape || 'flat';
+                            
+                            block += `    int currentDeg_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, ${minDeg}, ${maxDeg});\n`;
+                            
+                            if (shape === 'flat') {
+                                let t = el.thickness || 2;
+                                block += `    for(int a=${minDeg}; a<=currentDeg_${pageIndex}_${el.id}; a++) {\n`;
+                                block += `      float rad = (a - 90) * 3.14159 / 180.0;\n`;
+                                block += `      for(int i=0; i<${t}; i++) {\n`;
+                                block += `        display.drawPixel(${el.x} + (${el.w}-i)*cos(rad), ${el.y} + (${el.w}-i)*sin(rad), SSD1306_WHITE);\n`;
+                                block += `      }\n`;
+                                block += `    }\n`;
+                            } else if (shape === 'bars') {
+                                let bc = el.barCount || 10;
+                                let t = el.thickness || 4;
+                                block += `    int activeBars_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, 0, ${bc});\n`;
+                                block += `    for(int i=0; i<${bc}; i++) {\n`;
+                                block += `      float angle = ${minDeg} + i * (${maxDeg} - ${minDeg}) / ${bc > 1 ? bc - 1 : 1};\n`;
+                                block += `      float rad = (angle - 90) * 3.14159 / 180.0;\n`;
+                                block += `      int x0 = ${el.x} + (${el.w} - ${t}) * cos(rad);\n`;
+                                block += `      int y0 = ${el.y} + (${el.w} - ${t}) * sin(rad);\n`;
+                                block += `      int x1 = ${el.x} + ${el.w} * cos(rad);\n`;
+                                block += `      int y1 = ${el.y} + ${el.w} * sin(rad);\n`;
+                                block += `      if (i < activeBars_${pageIndex}_${el.id}) display.drawLine(x0, y0, x1, y1, SSD1306_WHITE);\n`;
+                                block += `    }\n`;
+                            } else if (shape === 'circle') {
+                                let bc = el.barCount || 10;
+                                let t = el.thickness || 2;
+                                block += `    int activeBars_${pageIndex}_${el.id} = map(${el.target}, ${el.min}, ${el.max}, 0, ${bc});\n`;
+                                block += `    for(int i=0; i<${bc}; i++) {\n`;
+                                block += `      float angle = ${minDeg} + i * (${maxDeg} - ${minDeg}) / ${bc > 1 ? bc - 1 : 1};\n`;
+                                block += `      float rad = (angle - 90) * 3.14159 / 180.0;\n`;
+                                block += `      int cx = ${el.x} + ${el.w} * cos(rad);\n`;
+                                block += `      int cy = ${el.y} + ${el.w} * sin(rad);\n`;
+                                block += `      if (i < activeBars_${pageIndex}_${el.id}) display.fillCircle(cx, cy, ${t}, SSD1306_WHITE);\n`;
+                                block += `      else display.drawCircle(cx, cy, ${t}, SSD1306_WHITE);\n`;
+                                block += `    }\n`;
+                            }
+                        }
+                    }
+
+                    if(el.type === 'shape') {
+                        if(el.shapeType === 'rect') {
+                            if(el.fill) block += `    display.fillRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                            else {
+                                let t = el.thickness || 1;
+                                if (t > 1) {
+                                    block += `    for(int16_t i=0; i<${t}; i++) { display.drawRect(${el.x}+i, ${el.y}+i, ${el.w}-i*2, ${el.h}-i*2, SSD1306_WHITE); }\n`;
+                                } else {
+                                    block += `    display.drawRect(${el.x}, ${el.y}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                                }
+                            }
+                        }
+                        if(el.shapeType === 'circle') {
+                            if(el.fill) block += `    display.fillCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                            else {
+                                let t = el.thickness || 1;
+                                if (t > 1) {
+                                    block += `    for(int16_t i=0; i<${t}; i++) { display.drawCircle(${el.x}, ${el.y}, ${el.w}-i, SSD1306_WHITE); }\n`;
+                                } else {
+                                    block += `    display.drawCircle(${el.x}, ${el.y}, ${el.w}, SSD1306_WHITE);\n`;
+                                }
+                            }
+                        }
+                        if(el.shapeType === 'line') {
+                            let t = el.thickness || 1;
+                            block += `    display.drawLine(${el.x}, ${el.y}, ${el.x + el.w}, ${el.y + el.h}, SSD1306_WHITE);\n`;
+                        }
+                    }
+
+                    if(el.type === 'bitmap') {
+                        block += `    display.drawBitmap(${el.x}, ${el.y}, bitmap_page${pageIndex}_img_${el.id}, ${el.w}, ${el.h}, SSD1306_WHITE);\n`;
+                    }
+
+                    if(el.alwaysVisible === false && el.condition && el.condition.trim() !== '') {
+                        let inner = block.split('\n').filter(l => l.trim().length > 0).map(l => '  ' + l).join('\n');
+                        if (el.visibilityMode === 'invisible_when') {
+                            pageBlock += `    if (!(${el.condition})) {\n${inner}\n    }\n`;
+                        } else {
+                            pageBlock += `    if (${el.condition}) {\n${inner}\n    }\n`;
+                        }
+                    } else {
+                        pageBlock += block;
+                    }
+                });
+
+                pageBlock += `  }\n\n`;
+                loop += pageBlock;
+            });
+
+            loop += `  display.display();\n}\n`;
+
+            if (state.project.library === 'u8g2') {
+                loop = loop.replace(/display\.clearDisplay\(\);/g, 'u8g2.clearBuffer();');
+                loop = loop.replace(/display\.display\(\);/g, 'u8g2.sendBuffer();');
+                
+                loop = loop.replace(/\/\/\s*U8G2_FONT:\s*(.*?)\n\s*display\.setTextSize\((.*?)\);/g, 'u8g2.setFont($1);');
+                loop = loop.replace(/display\.setTextSize\((.*?)\);/g, 'u8g2.setFont(u8g2_font_5x7_tr);');
+                
+                loop = loop.replace(/display\.setCursor\((.*?), (.*?)\);/g, function(match, x, y) {
+                     return `u8g2.setCursor(${x}, (${y}) + 8); // U8g2 uses bottom-left baseline`;
+                });
+                loop = loop.replace(/display\.print\(/g, 'u8g2.print(');
+                loop = loop.replace(/display\.fillRect\((.*?), (.*?), (.*?), (.*?), SSD1306_BLACK\)/g, 'u8g2.setDrawColor(0); u8g2.drawBox($1, $2, $3, $4); u8g2.setDrawColor(1)');
+                loop = loop.replace(/display\.fillRect\((.*?), (.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawBox($1, $2, $3, $4)');
+                loop = loop.replace(/display\.drawRect\((.*?), (.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawFrame($1, $2, $3, $4)');
+                loop = loop.replace(/display\.fillCircle\((.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawDisc($1, $2, $3)');
+                loop = loop.replace(/display\.drawCircle\((.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawCircle($1, $2, $3)');
+                loop = loop.replace(/display\.drawLine\((.*?), (.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawLine($1, $2, $3, $4)');
+                loop = loop.replace(/display\.drawPixel\((.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawPixel($1, $2)');
+                loop = loop.replace(/display\.drawBitmap\((.*?), (.*?), (.*?), (.*?), (.*?), SSD1306_WHITE\)/g, 'u8g2.drawXBMP($1, $2, $4, $5, $3)');
+            } else {
+                loop = loop.replace(/\s*\/\/ U8G2_FONT: (.*?)\n/g, '\n');
+            }
+
+            codeBlocks.init = init;
+            codeBlocks.setup = setup;
+            codeBlocks.loop = loop;
+            
+            let allCode = init + '\n' + setup + '\n' + loop;
+            codeOutput.value = allCode;
+        }
+
+        window.copyCode = function(part) {
+            let t = '';
+            if(part === 'all') t = codeOutput.value;
+            else t = codeBlocks[part];
+            
+            navigator.clipboard.writeText(t).then(() => {
+                alert(part.toUpperCase() + ' Code copied to clipboard!');
+            });
+        }
+        
+    </script>
+</body>
+</html>
